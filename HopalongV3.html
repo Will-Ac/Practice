@@ -1,0 +1,567 @@
+import M5
+from M5 import *
+import m5ui
+import time
+import random
+import math
+
+# =========================================================
+# Hopalong (Martin) map - Wolfram notebook style
+#
+# Map (Wolfram):
+#   x_{n+1} = y_n - Sign[x_n] * Sqrt[Abs[b*x_n - c]]
+#   y_{n+1} = a - x_n
+#
+# IMU control:
+#   - Starts drawing immediately after baseline capture (no menu first)
+#   - Flat within tolerance  -> DRAW
+#   - Tilt beyond tolerance  -> ABORT draw immediately + show MENU
+#
+# Menu (only when tilted):
+#   - A : next item
+#   - B : decrement (tap=small; hold accelerates)
+#   - C : increment (tap=small; hold accelerates)
+#   - Lay flat again to draw with selected values
+#
+# Added (requested):
+#   - Presets like the notebook:
+#       * N_ORBITS preset: 10 / 25 / 50
+#       * N_ITERS preset: 2000 / 4000 / 8000
+#   - "Full range" toggle for initial points (FR) + range value (R)
+#       * FR=ON  -> initial points in [-100, +100]
+#       * FR=OFF -> initial points in [-R, +R]
+# =========================================================
+
+# -------------------- IMU settings --------------------
+TILT_ENTER_DEG = 5.0
+TILT_EXIT_DEG  = 6.0
+BASELINE_SAMPLES = 18
+# ------------------------------------------------------
+
+# -------------------- Wolfram-like defaults --------------------
+# Preset lists (like notebook)
+ORBITS_PRESETS = [10, 25, 50]
+ITERS_PRESETS  = [2000, 4000, 8000]
+
+N_ORBITS   = 25
+N_ITERS    = 8000
+BURN_IN    = 50
+
+RANDOMIZE  = True
+
+ALPHA = 1.000000
+BETA  = 19.000000
+DELTA = 0
+
+# Slider-like ranges (notebook)
+ALPHA_MIN, ALPHA_MAX = -100.0, 100.0
+BETA_MIN,  BETA_MAX  = -100.0, 100.0
+
+# Initial-point range controls (notebook-like FR/r)
+FULL_RANGE_INIT = True     # FR
+R_INIT = 100.0             # r (used when FULL_RANGE_INIT=False)
+
+INIT_FULL_MIN, INIT_FULL_MAX = -100.0, 100.0
+R_INIT_MIN, R_INIT_MAX = 1.0, 1000.0
+# ------------------------------------------------------
+
+PALETTE = [
+  0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0x00FFFF, 0xFF00FF,
+  0xFF8000, 0x80FF00, 0x0080FF, 0xFFFFFF, 0xC0C0C0, 0xFF40A0
+]
+
+page0 = None
+
+# UI state
+_menu = False
+_sel = 0
+_redraw = False
+_abort_draw = False
+_is_flat_state = True
+
+_base_pitch = 0.0
+_base_roll  = 0.0
+
+# Hold-repeat state for B/C
+_hold_btn = None
+_hold_start_ms = 0
+_hold_last_step_ms = 0
+
+
+# ---------------------- helpers ----------------------
+def _now_ms():
+  try:
+    return time.ticks_ms()
+  except:
+    return int(time.time() * 1000)
+
+def _clamp(v, lo, hi):
+  if v < lo: return lo
+  if v > hi: return hi
+  return v
+
+def _fmt_bool(v):
+  return "ON" if v else "OFF"
+
+def _cycle_prev(vals, cur):
+  # pick previous item in vals (or last)
+  try:
+    idx = vals.index(cur)
+  except:
+    idx = 0
+  return vals[idx - 1] if idx > 0 else vals[-1]
+
+def _cycle_next(vals, cur):
+  try:
+    idx = vals.index(cur)
+  except:
+    idx = 0
+  return vals[(idx + 1) % len(vals)]
+
+
+# ---------------------- IMU access ----------------------
+def imu_read_accel_g():
+  try:
+    ax, ay, az = Imu.getAccel()
+    return float(ax), float(ay), float(az)
+  except:
+    pass
+  try:
+    ax, ay, az = IMU.getAccel()
+    return float(ax), float(ay), float(az)
+  except:
+    pass
+  try:
+    ax, ay, az = M5.IMU.getAccel()
+    return float(ax), float(ay), float(az)
+  except:
+    pass
+  raise RuntimeError("IMU accel read not available (expected Imu/IMU/M5.IMU).")
+
+def accel_to_pitch_roll_deg(ax, ay, az):
+  denom = math.sqrt(ay*ay + az*az)
+  if denom < 1e-9:
+    denom = 1e-9
+  pitch = math.degrees(math.atan2(-ax, denom))
+  roll  = math.degrees(math.atan2(ay, az if abs(az) > 1e-9 else 1e-9))
+  return pitch, roll
+
+def compute_tilt_error_deg():
+  ax, ay, az = imu_read_accel_g()
+  p, r = accel_to_pitch_roll_deg(ax, ay, az)
+  dp = abs(p - _base_pitch)
+  dr = abs(r - _base_roll)
+  return dp, dr
+
+def update_flat_state():
+  global _is_flat_state
+  dp, dr = compute_tilt_error_deg()
+
+  if _is_flat_state:
+    if (dp > TILT_EXIT_DEG) or (dr > TILT_EXIT_DEG):
+      _is_flat_state = False
+  else:
+    if (dp <= TILT_ENTER_DEG) and (dr <= TILT_ENTER_DEG):
+      _is_flat_state = True
+
+
+# ---------------------- parameter getters/setters ----------------------
+def get_RANDOMIZE(): return RANDOMIZE
+def set_RANDOMIZE(v):
+  global RANDOMIZE
+  RANDOMIZE = bool(v)
+
+def get_ALPHA(): return ALPHA
+def set_ALPHA(v):
+  global ALPHA
+  ALPHA = float(_clamp(v, ALPHA_MIN, ALPHA_MAX))
+
+def get_BETA(): return BETA
+def set_BETA(v):
+  global BETA
+  BETA = float(_clamp(v, BETA_MIN, BETA_MAX))
+
+def get_DELTA(): return DELTA
+def set_DELTA(v):
+  global DELTA
+  DELTA = 0 if int(v) <= 0 else 1
+
+def get_ORBITS(): return N_ORBITS
+def set_ORBITS(v):
+  global N_ORBITS
+  N_ORBITS = int(max(1, min(200, v)))
+
+def get_ITERS(): return N_ITERS
+def set_ITERS(v):
+  global N_ITERS
+  N_ITERS = int(max(200, min(100000, v)))
+
+def get_BURNIN(): return BURN_IN
+def set_BURNIN(v):
+  global BURN_IN
+  BURN_IN = int(max(0, min(20000, v)))
+
+def get_FR(): return FULL_RANGE_INIT
+def set_FR(v):
+  global FULL_RANGE_INIT
+  FULL_RANGE_INIT = bool(v)
+
+def get_RINIT(): return R_INIT
+def set_RINIT(v):
+  global R_INIT
+  R_INIT = float(_clamp(v, R_INIT_MIN, R_INIT_MAX))
+
+
+# Menu: (label, getter, setter, step_fine, step_coarse, type)
+# type: bool | float | int | int01 | preset
+MENU = [
+  ("RANDOMIZE", get_RANDOMIZE, set_RANDOMIZE, 1,        1,        "bool"),
+  ("ALPHA (a)", get_ALPHA,     set_ALPHA,     0.001,    0.050,    "float"),
+  ("BETA  (b)", get_BETA,      set_BETA,      0.001,    0.050,    "float"),
+  ("DELTA (c)", get_DELTA,     set_DELTA,     1,        1,        "int01"),
+
+  # Notebook-like presets
+  ("ORBITS 10/25/50", get_ORBITS, set_ORBITS, 0, 0, "preset_orbits"),
+  ("ITERS 2/4/8k",     get_ITERS,  set_ITERS,  0, 0, "preset_iters"),
+
+  # Still allow fine tuning if you want
+  ("N_ORBITS",  get_ORBITS,  set_ORBITS,  1,        10,       "int"),
+  ("N_ITERS",   get_ITERS,   set_ITERS,   200,      2000,     "int"),
+
+  ("BURN_IN",   get_BURNIN,  set_BURNIN,  5,        50,       "int"),
+
+  # Notebook-like FR / r initial range control
+  ("FR init",   get_FR,      set_FR,      1,        1,        "bool"),
+  ("r init",    get_RINIT,   set_RINIT,   0.5,      10.0,     "float"),
+]
+
+
+# ---------------------- Hopalong (Wolfram) map ----------------------
+def hopalong_step(x, y, a, b, c):
+  s = 1 if x > 0 else (-1 if x < 0 else 0)
+  return (y - s * math.sqrt(abs(b * x - c)),
+          a - x)
+
+def gen_params():
+  a = random.uniform(ALPHA_MIN, ALPHA_MAX)
+  b = random.uniform(BETA_MIN,  BETA_MAX)
+  c = 0 if random.getrandbits(1) == 0 else 1
+  return a, b, c
+
+def init_point_range():
+  if FULL_RANGE_INIT:
+    return INIT_FULL_MIN, INIT_FULL_MAX
+  r = R_INIT
+  return -r, r
+
+def gen_initial_points(n):
+  lo, hi = init_point_range()
+  pts = []
+  for _ in range(n):
+    pts.append((random.uniform(lo, hi), random.uniform(lo, hi)))
+  return pts
+
+def compute_bounds(a, b, c, pts, n_iters, burn_in):
+  xmin =  1e30
+  xmax = -1e30
+  ymin =  1e30
+  ymax = -1e30
+
+  for (x0, y0) in pts:
+    x, y = x0, y0
+    for k in range(n_iters):
+      x, y = hopalong_step(x, y, a, b, c)
+      if k < burn_in:
+        continue
+      if x < xmin: xmin = x
+      if x > xmax: xmax = x
+      if y < ymin: ymin = y
+      if y > ymax: ymax = y
+
+  if (xmax - xmin) < 1e-9: xmax = xmin + 1.0
+  if (ymax - ymin) < 1e-9: ymax = ymin + 1.0
+  return xmin, xmax, ymin, ymax
+
+def plot_orbits(a, b, c, pts, n_iters, burn_in):
+  global _abort_draw, _menu, _redraw
+
+  w = Display.width()
+  h = Display.height()
+
+  xmin, xmax, ymin, ymax = compute_bounds(a, b, c, pts, n_iters, burn_in)
+
+  mx = 0.03 * (xmax - xmin)
+  my = 0.03 * (ymax - ymin)
+  xmin -= mx; xmax += mx
+  ymin -= my; ymax += my
+
+  sx = (w - 1) / (xmax - xmin)
+  sy = (h - 1) / (ymax - ymin)
+
+  Display.clear(0x000000)
+
+  for i, (x0, y0) in enumerate(pts):
+    M5.update()
+    update_flat_state()
+    if not _is_flat_state:
+      _abort_draw = True
+      _menu = True
+      _redraw = False
+      return
+
+    color = PALETTE[i % len(PALETTE)]
+    x, y = x0, y0
+
+    for k in range(n_iters):
+      if (k & 63) == 0:
+        M5.update()
+        update_flat_state()
+        if not _is_flat_state:
+          _abort_draw = True
+          _menu = True
+          _redraw = False
+          return
+
+      x, y = hopalong_step(x, y, a, b, c)
+      if k < burn_in:
+        continue
+
+      px = int((x - xmin) * sx)
+      py = int((ymax - y) * sy)
+      if 0 <= px < w and 0 <= py < h:
+        Display.drawPixel(px, py, color)
+
+  Display.setCursor(2, 2)
+  Display.setTextColor(0xFFFFFF, 0x000000)
+  lo, hi = init_point_range()
+  Display.print("a={:.6f} b={:.6f} c={}  init=[{:.1f},{:.1f}]".format(a, b, c, lo, hi))
+
+def draw_once():
+  global _abort_draw
+  _abort_draw = False
+
+  if RANDOMIZE:
+    a, b, c = gen_params()
+  else:
+    a, b, c = ALPHA, BETA, DELTA
+
+  pts = gen_initial_points(N_ORBITS)
+  plot_orbits(a, b, c, pts, N_ITERS, BURN_IN)
+
+
+# ---------------------- Menu UI ----------------------
+def draw_menu():
+  Display.clear(0x101010)
+  Display.setTextColor(0xFFFFFF, 0x101010)
+  Display.setCursor(2, 2)
+  Display.print("TILT MENU: A=Next  B=-  C=+   (Lay flat to draw)")
+
+  y = 24
+  for i, item in enumerate(MENU):
+    label, getter, _, _, _, typ = item
+    is_sel = (i == _sel)
+
+    if is_sel:
+      Display.fillRect(0, y - 2, Display.width(), 18, 0x404040)
+
+    Display.setCursor(4, y)
+    Display.setTextColor(0xFFFFFF, 0x404040 if is_sel else 0x101010)
+
+    v = getter()
+
+    if typ == "bool":
+      s = _fmt_bool(v)
+    elif typ == "float":
+      s = "{:.6f}".format(v)
+    elif typ == "preset_orbits":
+      s = "{} (preset)".format(v)
+    elif typ == "preset_iters":
+      s = "{} (preset)".format(v)
+    else:
+      s = "{}".format(v)
+
+    Display.print("{:<14s} {}".format(label, s))
+    y += 18
+
+def _repeat_profile(held_ms):
+  # (repeat interval ms, step scale)
+  if held_ms < 250:
+    return 999999, 1.0
+  if held_ms < 700:
+    return 170, 2.0
+  if held_ms < 1300:
+    return 110, 6.0
+  return 70, 14.0
+
+def menu_step(direction, held_ms, initial_click=False):
+  label, getter, setter, step_fine, step_coarse, typ = MENU[_sel]
+
+  # presets (cycle)
+  if typ == "preset_orbits":
+    if initial_click:
+      cur = getter()
+      setter(_cycle_prev(ORBITS_PRESETS, cur) if direction < 0 else _cycle_next(ORBITS_PRESETS, cur))
+    return
+
+  if typ == "preset_iters":
+    if initial_click:
+      cur = getter()
+      setter(_cycle_prev(ITERS_PRESETS, cur) if direction < 0 else _cycle_next(ITERS_PRESETS, cur))
+    return
+
+  # toggles
+  if typ == "bool":
+    if initial_click:
+      setter(not getter())
+    return
+
+  if typ == "int01":
+    if initial_click:
+      setter(0 if getter() == 1 else 1)
+    return
+
+  # numeric
+  v = getter()
+  base_step = step_fine if held_ms < 600 else step_coarse
+  _, scale = _repeat_profile(held_ms)
+  step = base_step * scale
+  setter(v + direction * step)
+
+def handle_menu_buttons():
+  global _sel, _hold_btn, _hold_start_ms, _hold_last_step_ms
+
+  if BtnA.wasPressed():
+    _sel = (_sel + 1) % len(MENU)
+    draw_menu()
+    return
+
+  now = _now_ms()
+
+  # B: decrement
+  if BtnB.wasPressed():
+    _hold_btn = 'B'
+    _hold_start_ms = now
+    _hold_last_step_ms = now
+    menu_step(-1, 0, initial_click=True)
+    draw_menu()
+    return
+
+  if BtnB.isPressed() and _hold_btn == 'B':
+    held = now - _hold_start_ms
+    interval, _ = _repeat_profile(held)
+    if now - _hold_last_step_ms >= interval:
+      _hold_last_step_ms = now
+      menu_step(-1, held, initial_click=False)
+      draw_menu()
+      return
+
+  if (not BtnB.isPressed()) and _hold_btn == 'B':
+    _hold_btn = None
+
+  # C: increment
+  if BtnC.wasPressed():
+    _hold_btn = 'C'
+    _hold_start_ms = now
+    _hold_last_step_ms = now
+    menu_step(+1, 0, initial_click=True)
+    draw_menu()
+    return
+
+  if BtnC.isPressed() and _hold_btn == 'C':
+    held = now - _hold_start_ms
+    interval, _ = _repeat_profile(held)
+    if now - _hold_last_step_ms >= interval:
+      _hold_last_step_ms = now
+      menu_step(+1, held, initial_click=False)
+      draw_menu()
+      return
+
+  if (not BtnC.isPressed()) and _hold_btn == 'C':
+    _hold_btn = None
+
+
+# ---------------------- Startup baseline capture ----------------------
+def capture_flat_baseline():
+  global _base_pitch, _base_roll
+
+  Display.clear(0x000000)
+  Display.setCursor(2, 2)
+  Display.setTextColor(0xFFFFFF, 0x000000)
+  Display.print("Calibrating flat...")
+
+  ps = 0.0
+  rs = 0.0
+  got = 0
+
+  for _ in range(BASELINE_SAMPLES):
+    M5.update()
+    ax, ay, az = imu_read_accel_g()
+    p, r = accel_to_pitch_roll_deg(ax, ay, az)
+    ps += p
+    rs += r
+    got += 1
+    time.sleep_ms(15)
+
+  _base_pitch = ps / got
+  _base_roll  = rs / got
+
+
+# ---------------------- UIFlow2 boilerplate ----------------------
+def setup():
+  global page0, _menu, _sel, _redraw, _is_flat_state
+
+  M5.begin()
+  Widgets.setRotation(1)
+  m5ui.init()
+  page0 = m5ui.M5Page(bg_c=0x000000)
+  page0.screen_load()
+
+  capture_flat_baseline()
+
+  _is_flat_state = True
+  update_flat_state()
+
+  _sel = 0
+  if _is_flat_state:
+    _menu = False
+    _redraw = True   # draw immediately
+  else:
+    _menu = True
+    _redraw = False
+    draw_menu()
+
+def loop():
+  global _menu, _redraw
+
+  M5.update()
+  update_flat_state()
+
+  if _is_flat_state:
+    if _menu:
+      _menu = False
+      _redraw = True
+    if _redraw:
+      _redraw = False
+      draw_once()
+  else:
+    if not _menu:
+      _menu = True
+      _redraw = False
+      draw_menu()
+    else:
+      handle_menu_buttons()
+
+  time.sleep_ms(5)
+
+if __name__ == '__main__':
+  try:
+    setup()
+    while True:
+      loop()
+  except (Exception, KeyboardInterrupt) as e:
+    try:
+      m5ui.deinit()
+      from utility import print_error_msg
+      print_error_msg(e)
+    except ImportError:
+      print("please update to latest firmware")
