@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Hopalong Variations — Dual Randomize</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; background: #000; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+
+    #backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.0);
+      display: none;
+      z-index: 9;
+      touch-action: none;
+    }
+
+    #menu {
+      position: fixed;
+      inset: 12px;
+      max-width: 860px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 16px;
+      background: rgba(16,16,16,.92);
+      color: #fff;
+      padding: 14px 14px 10px 14px;
+      display: none;
+      overflow: auto;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      z-index: 10;
+    }
+
+    #menuTop {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      padding: 4px 0 10px 0;
+      background: rgba(16,16,16,.92);
+      z-index: 11;
+    }
+    #menuTop h2 { margin: 0; font-size: 16px; font-weight: 800; }
+    #menuBtns { display: flex; gap: 10px; align-items: center; }
+    button {
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.08);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 700;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 190px 1fr 170px;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .row:last-child { border-bottom: none; }
+    .row label { opacity: .9; }
+    .row output { text-align: right; font-variant-numeric: tabular-nums; opacity: .95; }
+    input[type="range"], select { width: 100%; }
+
+    .cmPreview {
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: linear-gradient(90deg, #000, #fff);
+    }
+    .subnote { font-size: 12px; opacity: .75; margin-top: 10px; line-height: 1.35; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  
+    #renderInfo{
+      position: fixed;
+      display: none; /* hidden for clean screen */
+      left: 12px;
+      right: 170px; /* leave room for view pad */
+      bottom: 12px;
+      max-width: 720px;
+      max-height: 18vh; /* smaller */
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 14px;
+      background: rgba(16,16,16,.70);
+      color: #fff;
+      padding: 8px 10px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      z-index: 8;
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+    }
+    #renderInfo .riEntry{
+      border-top: 1px solid rgba(255,255,255,.10);
+      padding: 8px 8px;
+      margin: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #renderInfo .riEntry:first-child{ border-top: none; padding-top: 0; margin-top: 0; }
+    #renderInfo .riHdr{
+      display:flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+    #renderInfo .riHdr b{ font-size: 13px; }
+    #renderInfo .riHdr span{ font-size: 12px; opacity:.75; }
+    #renderInfo .riGrid{
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 4px 10px;
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    #renderInfo .riKey{ font-size: 12px; opacity: .78; }
+    #renderInfo .riVal{ font-size: 12px; font-variant-numeric: tabular-nums; }
+    #renderInfo .riVal code{ font-size: 11px; }
+    
+    #renderInfo .riEntry{
+      border-top: 1px solid rgba(255,255,255,.10);
+      padding: 8px 8px;
+      margin: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #renderInfo .riEntry:hover{ background: rgba(255,255,255,.04); border-radius: 12px; padding: 10px 8px; margin-left:-4px; margin-right:-4px; }
+    #renderInfo .riEntry:active{ background: rgba(255,255,255,.07); }
+    #renderInfo .riEntry.selected{ outline: 1px solid rgba(255,255,255,.28); border-radius: 12px; padding: 10px 8px; margin-left:-4px; margin-right:-4px; }
+    #renderInfo .riHdr b{ font-size: 12px; }
+    #renderInfo .riHdr span{ font-size: 11px; opacity:.75; }
+    #renderInfo .riGrid{
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 4px 10px;
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    #renderInfo .riCmapBar{
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.18);
+      margin-top: 4px;
+    }
+
+  
+    #viewControls{
+      position: fixed;
+      display: none; /* shown on long-press */
+      right: 12px;
+      bottom: 12px;
+      z-index: 9;
+      display: grid;
+      grid-template-columns: 64px 64px 64px;
+      grid-template-rows: 64px 64px 64px 64px;
+      gap: 10px;
+      padding: 14px;              /* dead-zone padding */
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(16,16,16,.78);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      touch-action: manipulation;
+      pointer-events: auto;        /* intercept taps even if you miss the buttons */
+    }
+    #viewControls button{
+      width: 64px; height: 64px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #viewControls button:active{ background: rgba(255,255,255,.10); }
+    #viewControls .vcEmpty{ visibility:hidden; }
+
+  
+    #installHint{
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: min(720px, calc(100vw - 24px));
+      background: rgba(16,16,16,.86);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 14px;
+      padding: 10px 12px;
+      color: #fff;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      z-index: 12;
+      display: none;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+    #installHint .row{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      border: none;
+      padding: 0;
+      grid-template-columns: none;
+    }
+    #installHint b{ font-size: 13px; }
+    #installHint p{ margin: 2px 0 0 0; font-size: 12px; opacity: .85; line-height: 1.25; }
+    #installHint button{
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="installHint"><div class="row"><div><b>Install for full‑screen</b><p>Share → Add to Home Screen (keep “Open as Web App” on) for the cleanest full‑screen experience.</p></div><div style="margin-left:auto; display:flex; gap:8px;"><button id="btnInstallDismiss" type="button">Dismiss</button></div></div></div>
+<div id="renderInfo" aria-live="polite"></div>
+<div id="backdrop"></div>
+
+<div id="menu">
+  <div id="menuTop">
+    <h2>Hopalong (dual randomize)</h2>
+    <div id="menuBtns">
+      <button id="btnApply">Apply + Draw</button>
+      <button id="btnClose">Close</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Formula</label>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <select id="formula"></select>
+      <div style="font-size:12px; opacity:.8" id="formulaDesc"></div>
+    </div>
+    <output id="formulaOut">Classic (sqrt)</output>
+  </div>
+
+  <div class="row">
+    <label>Randomize mode</label>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+      <label style="display:flex; gap:6px; align-items:center;">
+        <input type="radio" name="randMode" value="ab" />
+        α/β only
+      </label>
+      <label style="display:flex; gap:6px; align-items:center;">
+        <input type="radio" name="randMode" value="all" checked />
+        All params
+      </label>
+    </div>
+    <output id="randModeOut">All params</output>
+  </div>
+
+  <div class="row">
+    <label>Auto-randomize</label>
+    <input id="randomize" type="checkbox" checked />
+    <output id="randomizeOut">ON</output>
+  </div>
+
+  <div class="row">
+    <label>α (alpha)</label>
+    <input id="alpha" type="range" min="-100" max="100" step="0.001" value="1.0" />
+    <output id="alphaOut">1.000000</output>
+  </div>
+
+  <div class="row">
+    <label>β (beta)</label>
+    <input id="beta" type="range" min="-100" max="100" step="0.001" value="19.0" />
+    <output id="betaOut">19.000000</output>
+  </div>
+
+  <div class="row">
+    <label>γ (gamma)</label>
+    <input id="gamma" type="range" min="-5" max="5" step="0.001" value="0.0" />
+    <output id="gammaOut">0.000000</output>
+  </div>
+
+  <div class="row">
+    <label>δ (delta)</label>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <label style="display:flex; gap:6px; align-items:center;"><input type="radio" name="delta" value="0" checked />0</label>
+      <label style="display:flex; gap:6px; align-items:center;"><input type="radio" name="delta" value="1" />1</label>
+    </div>
+    <output id="deltaOut">0</output>
+  </div>
+
+  <div class="row">
+    <label>Orbits (N)</label>
+    <input id="orbits" type="range" min="1" max="80" step="1" value="25" />
+    <output id="orbitsOut">25</output>
+  </div>
+
+  <div class="row">
+    <label>Iters</label>
+    <input id="iters" type="range" min="500" max="50000" step="100" value="8000" />
+    <output id="itersOut">8000</output>
+  </div>
+
+  <div class="row">
+    <label>Burn-in</label>
+    <input id="burn" type="range" min="0" max="5000" step="5" value="50" />
+    <output id="burnOut">50</output>
+  </div>
+
+  <div class="row">
+    <label>Range r</label>
+    <input id="rangeR" type="range" min="20" max="2000" step="1" value="300" />
+    <output id="rangeROut">300</output>
+  </div>
+
+  <div class="row">
+    <label>Init range</label>
+    <input id="initR" type="range" min="10" max="300" step="1" value="100" />
+    <output id="initROut">100</output>
+  </div>
+
+  <div class="row">
+    <label>Color map</label>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <select id="cmap"></select>
+      <div class="cmPreview" id="cmPreview"></div>
+    </div>
+    <output id="cmapOut">Turbo</output>
+  </div>
+
+  <div class="subnote">
+    Gestures:
+    <br>• Short tap (menu hidden): <b>redraw</b>
+    <br>• Long press (~0.5s): <b>toggle controls</b>
+    <br>• Menu open: <b>tap outside</b> closes + draws (controls auto-hide)
+    <br><br>
+    Randomize:
+    <br>• If Auto-randomize ON, each redraw randomizes using the selected mode.
+    <br>• α/β only mode keeps formula, γ, δ, N, iters, burn, range, init, colormap unchanged.
+    <br>• All params mode randomizes <i>everything in the menu</i> (formula, γ, δ, N, iters, burn, range, init, colormap) as well as α/β.
+  </div>
+</div>
+
+
+
+  <div id="viewControls" aria-label="View controls">
+    <button id="vcPlus" title="Zoom in">+</button>
+    <button id="vcUp" title="Move up">▲</button>
+    <button id="vcMinus" title="Zoom out">−</button>
+
+    <button id="vcLeft" title="Move left">◀</button>
+    <button id="vcMenu" title="Menu">☰</button>
+    <button id="vcRight" title="Move right">▶</button>
+
+    <button id="vcReset" title="Reset view">⟲</button>
+    <button id="vcDown" title="Move down">▼</button>
+    <button id="vcHide" title="Hide controls">✕</button>
+  </div>
+<script>
+(() => {
+  // ---------- canvas / pixel buffer ----------
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let img, buf;
+
+  // View-only adjustments for the *last* completed render (no parameter changes)
+  let viewZoom = 1.0;
+  let viewPanX = 0.0; // world units
+  let viewPanY = 0.0; // world units
+
+  // Stored points/colors from the last completed render
+  let lastPtsXY = null;         // Float32Array of [x0,y0,x1,y1,...] in world coords
+  let lastPtOrbit = null;       // Uint16Array orbit index per point
+  let lastPtCount = 0;          // number of points
+  let lastOrbitColors = null;   // array of [r,g,b] per orbit
+  let lastBaseR = 0;            // r used for mapping
+
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    ctx.imageSmoothingEnabled = false;
+    img = ctx.createImageData(canvas.width, canvas.height);
+    buf = img.data;
+    clearScreen();
+  }
+  window.addEventListener('resize', resize, { passive: true });
+
+  function clearScreen() {
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  resize();
+  attachViewControls();
+
+  function setPixel(x, y, r, g, b) {
+    const idx = (y * canvas.width + x) * 4;
+    buf[idx] = r; buf[idx+1] = g; buf[idx+2] = b; buf[idx+3] = 255;
+  }
+  function resetView() {
+    viewZoom = 1.0;
+    viewPanX = 0.0;
+    viewPanY = 0.0;
+  }
+
+  function redrawLastRender() {
+    if (!lastPtsXY || !lastPtOrbit || !lastOrbitColors || lastPtCount <= 0) return;
+
+    const w = canvas.width, h = canvas.height;
+    const r = lastBaseR;
+
+    const sx = ((w - 1) / (2 * r)) * viewZoom;
+    const sy = ((h - 1) / (2 * r)) * viewZoom;
+    const xoff = r;
+    const yoff = r;
+
+    // clear buffer
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 255;
+    }
+
+    for (let i = 0; i < lastPtCount; i++) {
+      const x = lastPtsXY[i*2]     - viewPanX;
+      const y = lastPtsXY[i*2 + 1] - viewPanY;
+      const px = ((x + xoff) * sx) | 0;
+      const py = ((yoff - y) * sy) | 0;
+
+      if ((px >>> 0) < w && (py >>> 0) < h) {
+        const c = lastOrbitColors[lastPtOrbit[i]];
+        setPixel(px, py, c[0], c[1], c[2]);
+      }
+    }
+
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function attachViewControls() {
+    const plus  = document.getElementById('vcPlus');
+    const minus = document.getElementById('vcMinus');
+    const up    = document.getElementById('vcUp');
+    const down  = document.getElementById('vcDown');
+    const left  = document.getElementById('vcLeft');
+    const right = document.getElementById('vcRight');
+    const reset = document.getElementById('vcReset');
+    const menuBtn = document.getElementById('vcMenu');
+    const hideBtn = document.getElementById('vcHide');
+    const box   = document.getElementById('viewControls');
+    if (box){
+      const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      box.addEventListener('pointerdown', swallow, { passive: false });
+      box.addEventListener('pointerup', swallow, { passive: false });
+      box.addEventListener('click', swallow, { passive: false });
+      box.addEventListener('touchstart', swallow, { passive: false });
+      box.addEventListener('touchend', swallow, { passive: false });
+    }
+
+    const clickish = (el, fn) => {
+      if (!el) return;
+      const handler = (ev) => { ev.preventDefault(); ev.stopPropagation(); if (drawing) return; fn(); };
+      el.addEventListener('click', handler, { passive: false });
+      el.addEventListener('touchstart', handler, { passive: false });
+    };
+
+    clickish(plus, () => { viewZoom *= 1.20; redrawLastRender(); });
+    clickish(minus, () => { viewZoom /= 1.20; redrawLastRender(); });
+
+    const panStep = () => (lastBaseR ? (lastBaseR * 0.12) / viewZoom : 10);
+
+    clickish(left,  () => { viewPanX -= panStep(); redrawLastRender(); });
+    clickish(right, () => { viewPanX += panStep(); redrawLastRender(); });
+    clickish(up,    () => { viewPanY += panStep(); redrawLastRender(); });
+    clickish(down,  () => { viewPanY -= panStep(); redrawLastRender(); });
+
+    clickish(reset, () => { resetView(); redrawLastRender(); });
+    // Menu and hide
+    clickish(menuBtn, () => { showMenu(true); });
+    clickish(hideBtn, () => { showControls(false); });
+
+  }
+
+
+  // ---------- UI / menu ----------
+  const menu = document.getElementById('menu');
+  const backdrop = document.getElementById('backdrop');
+  const btnApply = document.getElementById('btnApply');
+  const btnClose = document.getElementById('btnClose');
+
+  const elFormula = document.getElementById('formula');
+  const elFormulaDesc = document.getElementById('formulaDesc');
+  const outFormula = document.getElementById('formulaOut');
+
+  const elRandModeOut = document.getElementById('randModeOut');
+  const randModeRadios = Array.from(document.querySelectorAll('input[name="randMode"]'));
+
+  const elRandomize = document.getElementById('randomize');
+  const elAlpha = document.getElementById('alpha');
+  const elBeta = document.getElementById('beta');
+  const elGamma = document.getElementById('gamma');
+  const elOrbits = document.getElementById('orbits');
+  const elIters = document.getElementById('iters');
+  const elBurn = document.getElementById('burn');
+  const elRangeR = document.getElementById('rangeR');
+  const elInitR = document.getElementById('initR');
+  const elCmap = document.getElementById('cmap');
+  const cmPreview = document.getElementById('cmPreview');
+
+  const outRandomize = document.getElementById('randomizeOut');
+  const outAlpha = document.getElementById('alphaOut');
+  const outBeta = document.getElementById('betaOut');
+  const outGamma = document.getElementById('gammaOut');
+  const outDelta = document.getElementById('deltaOut');
+  const outOrbits = document.getElementById('orbitsOut');
+  const outIters = document.getElementById('itersOut');
+  const outBurn = document.getElementById('burnOut');
+  const outRangeR = document.getElementById('rangeROut');
+  const outInitR = document.getElementById('initROut');
+  const outCmap = document.getElementById('cmapOut');
+
+  const deltaRadios = Array.from(document.querySelectorAll('input[name="delta"]'));
+  function getDelta() {
+    const r = deltaRadios.find(x => x.checked);
+    return r ? parseInt(r.value, 10) : 0;
+  }
+
+  function getRandMode() {
+    const r = randModeRadios.find(x => x.checked);
+    return r ? r.value : "ab";
+  }
+
+  // ---------- colormaps ----------
+  function clamp01(x){ return x < 0 ? 0 : (x > 1 ? 1 : x); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function lerp3(c1,c2,t){ return [lerp(c1[0],c2[0],t), lerp(c1[1],c2[1],t), lerp(c1[2],c2[2],t)]; }
+  function fromStops(stops, t){
+    t = clamp01(t);
+    for (let i=0; i<stops.length-1; i++){
+      const a = stops[i], b = stops[i+1];
+      if (t >= a[0] && t <= b[0]){
+        const u = (t - a[0]) / (b[0] - a[0] || 1);
+        return lerp3(a[1], b[1], u);
+      }
+    }
+    return stops[stops.length-1][1];
+  }
+
+  const ColorMaps = {
+    "Turbo": (t) => fromStops([
+      [0.00,[48,18,59]],[0.10,[50,44,125]],[0.20,[32,96,189]],[0.30,[41,158,179]],
+      [0.40,[93,201,99]],[0.50,[177,222,44]],[0.60,[236,199,24]],[0.70,[250,144,25]],
+      [0.80,[243,85,38]],[0.90,[206,41,57]],[1.00,[122,4,3]]
+    ], t),
+    "Viridis": (t) => fromStops([[0,[68,1,84]],[.25,[59,82,139]],[.5,[33,145,140]],[.75,[94,201,98]],[1,[253,231,37]]], t),
+    "Plasma": (t) => fromStops([[0,[13,8,135]],[.25,[126,3,167]],[.5,[203,71,119]],[.75,[248,149,64]],[1,[240,249,33]]], t),
+    "Inferno": (t) => fromStops([[0,[0,0,4]],[.25,[87,15,109]],[.5,[187,55,84]],[.75,[249,142,8]],[1,[252,255,164]]], t),
+    "Magma": (t) => fromStops([[0,[0,0,4]],[.25,[78,18,123]],[.5,[182,54,121]],[.75,[251,136,97]],[1,[252,253,191]]], t),
+    "Gray": (t) => { const v = Math.round(255*clamp01(t)); return [v,v,v]; },
+    "Rainbow": (t) => {
+      t = clamp01(t);
+      const h = (1 - t) * 240;
+      const c = 1, hp = h/60, x = c*(1-Math.abs((hp%2)-1));
+      let r=0,g=0,b=0;
+      if (hp<1){ r=c; g=x; } else if (hp<2){ r=x; g=c; }
+      else if (hp<3){ g=c; b=x; } else if (hp<4){ g=x; b=c; }
+      else if (hp<5){ r=x; b=c; } else { r=c; b=x; }
+      return [Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+    },
+    "Heat": (t) => fromStops([[0,[0,0,0]],[.33,[180,0,0]],[.66,[255,160,0]],[1,[255,255,255]]], t),
+    "Ocean": (t) => fromStops([[0,[0,0,0]],[.25,[0,20,70]],[.5,[0,90,160]],[.75,[40,180,220]],[1,[220,250,255]]], t)
+  };
+
+  // ---------- render info panel ----------
+const renderInfo = document.getElementById('renderInfo');
+renderInfo.addEventListener('pointerdown', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('pointerup', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('click', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('touchstart', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('touchend', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+
+
+const HISTORY_KEY = "hopalong_render_history_v1";
+const MAX_HISTORY = 50;
+
+let renderCount = 0;
+let lastRender = null;
+let renderHistory = [];
+
+function loadHistory(){
+  try{
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) renderHistory = arr.slice(0, MAX_HISTORY);
+    if (renderHistory.length) {
+      lastRender = renderHistory[0];
+      // keep renderCount monotonic if possible
+      const mx = renderHistory.reduce((acc,p)=>Math.max(acc, p._id||0), 0);
+      renderCount = Math.max(renderCount, mx);
+    }
+  }catch(_){}
+}
+
+function saveHistory(){
+  try{
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(renderHistory.slice(0, MAX_HISTORY)));
+  }catch(_){}
+}
+
+function nowStamp(){
+  const d = new Date();
+  return d.toLocaleString(undefined, { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function fmtNum(x, digits=6){
+  return (Number.isFinite(x) ? (+x).toFixed(digits) : String(x));
+}
+
+function cmapGradientCSS(name){
+  const cmap = ColorMaps[name] || ColorMaps['Turbo'];
+  const stops = [];
+  for (let i=0;i<=10;i++){
+    const t=i/10;
+    const c=cmap(t);
+    stops.push(`rgb(${c[0]|0},${c[1]|0},${c[2]|0}) ${Math.round(t*100)}%`);
+  }
+  return `linear-gradient(90deg, ${stops.join(',')})`;
+}
+
+function applyParamsToUI(p){
+  // Formula
+  if (p.formulaId) elFormula.value = p.formulaId;
+
+  // Randomize
+  if (typeof p.autoRandomizeRaw === "boolean") elRandomize.checked = p.autoRandomizeRaw;
+
+  // Rand mode
+  if (p.randModeRaw) setRandMode(p.randModeRaw);
+
+  // Params
+  if (p.alpha != null) elAlpha.value = String(p.alpha);
+  if (p.beta  != null) elBeta.value  = String(p.beta);
+  if (p.gamma != null) elGamma.value = String(p.gamma);
+
+  // Delta
+  if (p.delta != null) setDelta(parseInt(p.delta, 10) || 0);
+
+  // Counts/ranges
+  if (p.N != null)     elOrbits.value = String(p.N);
+  if (p.iters != null) elIters.value  = String(p.iters);
+  if (p.burn != null)  elBurn.value   = String(p.burn);
+  if (p.rangeR != null) elRangeR.value = String(p.rangeR);
+  if (p.initR  != null) elInitR.value  = String(p.initR);
+
+  // Colormap
+  if (p.cmap) elCmap.value = p.cmap;
+
+  syncUI();
+}
+
+function renderHistoryUI(selectedId=null){
+  renderInfo.innerHTML = "";
+
+  if (!renderHistory.length){
+    renderInfo.innerHTML = '<div style="opacity:.75; font-size:12px;">No renders yet. Tap canvas to draw. Long-press to open menu.</div>';
+    return;
+  }
+
+  for (const p of renderHistory){
+    const e = document.createElement('div');
+    e.className = 'riEntry' + ((selectedId && p._id === selectedId) ? ' selected' : '');
+    e.dataset.rid = String(p._id || 0);
+
+    const status = p.completed ? 'complete' : 'aborted';
+
+    e.innerHTML = `
+      <div class="riHdr">
+        <b>Render #${p._id || ""} — ${status}</b>
+        <span>${p.when || ""}</span>
+      </div>
+      <div class="riGrid">
+        <div class="riKey">Formula</div>
+        <div class="riVal"><b>${p.formulaName || ""}</b> <span style="opacity:.75">(${p.formulaId || ""})</span><br><code>${p.formulaDesc || ""}</code></div>
+
+        <div class="riKey">Parameters</div>
+        <div class="riVal">α=${fmtNum(+p.alpha)}, β=${fmtNum(+p.beta)}, γ=${fmtNum(+p.gamma)}, δ=${String(p.delta)}</div>
+
+        <div class="riKey">Orbits / iters</div>
+        <div class="riVal">N=${String(p.N)}, iters=${String(p.iters)}, burn=${String(p.burn)}</div>
+
+        <div class="riKey">Ranges</div>
+        <div class="riVal">range r=${String(p.rangeR)}, init range=${String(p.initR)}</div>
+
+        <div class="riKey">Color map</div>
+        <div class="riVal">${p.cmap || ""}<div class="riCmapBar" style="background:${p.cmapCSS || ""}"></div></div>
+
+        <div class="riKey">Randomize</div>
+        <div class="riVal">auto=${p.autoRandomizeRaw ? 'ON' : 'OFF'}, mode=${(p.randModeRaw==='ab') ? 'α/β only' : 'All params'}</div>
+
+        <div class="riKey"></div>
+        <div class="riVal" style="opacity:.75">Tap this entry to load + render again.</div>
+      </div>
+    `;
+
+    const loadThis = (ev) => {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      lastRender = p;
+      applyParamsToUI(p);
+      // close menu if open, then draw using these exact settings
+      showMenu(false);
+      requestDraw();
+      renderHistoryUI(p._id);
+    };
+    e.addEventListener('click', loadThis, { passive: false });
+    e.addEventListener('pointerup', loadThis, { passive: false });
+    e.addEventListener('touchend', loadThis, { passive: false });
+
+    renderInfo.appendChild(e);
+  }
+}
+
+function addRenderEntry(p){
+  renderCount++;
+  p._id = renderCount;
+
+  lastRender = p;
+  renderHistory.unshift(p);
+  if (renderHistory.length > MAX_HISTORY) renderHistory.length = MAX_HISTORY;
+
+  saveHistory();
+  renderHistoryUI(p._id);
+}
+
+loadHistory();
+renderHistoryUI(lastRender ? lastRender._id : null);
+
+
+  function initColorMapSelect(){
+    for (const n of Object.keys(ColorMaps)){
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      elCmap.appendChild(opt);
+    }
+    elCmap.value = "Turbo";
+  }
+
+  function updateCmapPreview(){
+    const name = elCmap.value;
+    outCmap.textContent = name;
+    const stops = [];
+    for (let i=0;i<=10;i++){
+      const t = i/10;
+      const [r,g,b] = ColorMaps[name](t);
+      stops.push(`rgb(${r|0},${g|0},${b|0}) ${Math.round(t*100)}%`);
+    }
+    cmPreview.style.background = `linear-gradient(90deg, ${stops.join(',')})`;
+  }
+
+  initColorMapSelect();
+  updateCmapPreview();
+
+  // ---------- Variants ----------
+  const Variants = [
+    { id:"classic_sqrt", name:"Classic (sqrt)", desc:"Wolfram/Martin: x' = y − sgn(x)·sqrt(|βx − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)), a - x ]; } },
+
+    { id:"sqrt_plus_gamma_y", name:"Classic + γy", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γy, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*y, a - x ]; } },
+
+    { id:"sqrt_plus_gamma_x", name:"Classic + γx", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γx, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*x, a - x ]; } },
+
+    { id:"mix_inside", name:"sqrt(|β(x+γy)−δ|)", desc:"Mix x,y inside sqrt: x' = y − sgn(x)·sqrt(|β(x+γy) − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*(x+g*y)-d)), a - x ]; } },
+
+    { id:"trig_kick_x", name:"Trig kick (sin x)", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·sin(x), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*Math.sin(x), a - x ]; } },
+
+    { id:"damped", name:"Damped (|γ|)", desc:"x' = (y − sgn(x)·sqrt(|βx − δ|))·(1−|γ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const base=y - s*Math.sqrt(Math.abs(b*x-d)); const damp=1-Math.min(0.95,Math.abs(g)); return [ base*damp, a - x ]; } },
+
+    // -------- added formulas (10) --------
+    { id:"y_feedback", name:"Y feedback (α−x+γy)", desc:"Keep classic x', add feedback on y: y' = α − x + γy",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const xn=y - s*Math.sqrt(Math.abs(b*x-d)); const yn=a - x + g*y; return [xn, yn]; } },
+
+    { id:"trig_kick_y", name:"Trig kick (sin y)", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·sin(y), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*Math.sin(y), a - x ]; } },
+
+    { id:"cos_xy_kick", name:"Trig kick (cos(x+y))", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·cos(x+y), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*Math.cos(x+y), a - x ]; } },
+
+    { id:"inside_sin_y", name:"Inside sqrt: x+γ·sin(y)", desc:"x' = y − sgn(x)·sqrt(|β(x+γ·sin(y)) − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const t=x + g*Math.sin(y); return [ y - s*Math.sqrt(Math.abs(b*t-d)), a - x ]; } },
+
+    { id:"inside_cos_x", name:"Inside sqrt: x+γ·cos(x)", desc:"x' = y − sgn(x)·sqrt(|β(x+γ·cos(x)) − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const t=x + g*Math.cos(x); return [ y - s*Math.sqrt(Math.abs(b*t-d)), a - x ]; } },
+
+    { id:"softsign_kick", name:"Softsign kick", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·(x/(1+|x|)), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const k = x/(1+Math.abs(x)); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*k, a - x ]; } },
+
+    { id:"tanh_kick", name:"Tanh kick", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·tanh(x), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const k = Math.tanh(x); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*k, a - x ]; } },
+
+    { id:"sign_xy", name:"Sign of (x·y)", desc:"Use sign(x·y): x' = y − sgn(xy)·sqrt(|βx − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const p=x*y; const s=p>0?1:(p<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)), a - x ]; } },
+
+    { id:"double_root", name:"Double-root kick", desc:"x' = y − sgn(x)·(sqrt(|βx−δ|)+γ·sqrt(|βy−δ|)), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const r1=Math.sqrt(Math.abs(b*x-d)); const r2=Math.sqrt(Math.abs(b*y-d)); return [ y - s*(r1 + g*r2), a - x ]; } },
+
+    { id:"xy_coupling", name:"XY coupling", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·(x·y/50), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const k=(x*y)/50; return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*k, a - x ]; } }
+  ];
+
+  
+  function initFormulaSelect(){
+    for (const v of Variants){
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.name;
+      elFormula.appendChild(opt);
+    }
+    elFormula.value = "classic_sqrt";
+  }
+
+  function getVariant() {
+    const id = elFormula.value;
+    return Variants.find(v => v.id === id) || Variants[0];
+  }
+
+  function updateFormulaDesc(){
+    const v = getVariant();
+    outFormula.textContent = v.name;
+    elFormulaDesc.textContent = v.desc;
+  }
+
+  initFormulaSelect();
+  updateFormulaDesc();
+
+  // ---------- sync UI ----------
+  function syncUI() {
+    outRandomize.textContent = elRandomize.checked ? "ON" : "OFF";
+    outAlpha.textContent = (+elAlpha.value).toFixed(6);
+    outBeta.textContent = (+elBeta.value).toFixed(6);
+    outGamma.textContent = (+elGamma.value).toFixed(6);
+    outDelta.textContent = String(getDelta());
+    outOrbits.textContent = String(parseInt(elOrbits.value, 10));
+    outIters.textContent = String(parseInt(elIters.value, 10));
+    outBurn.textContent = String(parseInt(elBurn.value, 10));
+    outRangeR.textContent = String(parseInt(elRangeR.value, 10));
+    outInitR.textContent = String(parseInt(elInitR.value, 10));
+    elRandModeOut.textContent = (getRandMode() === "ab") ? "α/β only" : "All params";
+    updateCmapPreview();
+    updateFormulaDesc();
+  }
+
+  [
+    elFormula, ...randModeRadios, elRandomize, elAlpha, elBeta, elGamma,
+    elOrbits, elIters, elBurn, elRangeR, elInitR, elCmap, ...deltaRadios
+  ].forEach(el => el.addEventListener('input', syncUI));
+
+  elCmap.addEventListener('change', syncUI);
+  elFormula.addEventListener('change', syncUI);
+
+  syncUI();
+
+  // ---------- controls show/hide (clean screen) ----------
+  const viewControlsEl = document.getElementById('viewControls');
+  let controlsVisible = false;
+  function showControls(show){
+    controlsVisible = !!show;
+    if (viewControlsEl) viewControlsEl.style.display = controlsVisible ? 'grid' : 'none';
+  }
+  // start clean
+  showControls(false);
+
+  // ---------- menu show/hide ----------
+  function showMenu(show) {
+    menu.style.display = show ? 'block' : 'none';
+    backdrop.style.display = show ? 'block' : 'none';
+    inMenu = show;
+    if (show && lastRender) {
+      // When opening the menu, present the parameters used for the last render.
+      applyParamsToUI(lastRender);
+    }
+  }
+
+  backdrop.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    abortDraw = true;
+    showMenu(false);
+    showControls(false);
+    requestDraw();
+  }, { passive: false });
+
+  // ---------- gesture handling ----------
+  let inMenu = false;
+  let drawing = false;
+  let abortDraw = false;
+
+  const LONG_PRESS_MS = 520;
+  let pressTimer = null;
+  let moved = false;
+
+  function onPressStart() {
+    moved = false;
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      // long-press toggles control panel
+      showControls(!controlsVisible);
+    }, LONG_PRESS_MS);
+  }
+
+  function onPressMove() {
+    moved = true;
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  }
+
+  function onPressEnd() {
+    if (!pressTimer) return;
+    clearTimeout(pressTimer);
+    pressTimer = null;
+    if (!moved && !inMenu && !controlsVisible) requestDraw();
+  }
+
+  canvas.addEventListener('pointerdown', onPressStart, { passive: true });
+  canvas.addEventListener('pointermove', onPressMove, { passive: true });
+  canvas.addEventListener('pointerup', onPressEnd, { passive: true });
+  canvas.addEventListener('pointercancel', onPressEnd, { passive: true });
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // ---------- helpers ----------
+  function randUniform(lo, hi) { return lo + Math.random() * (hi - lo); }
+  function randInt(lo, hi) { return Math.floor(lo + Math.random() * (hi - lo + 1)); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function setDelta(v) {
+    deltaRadios.forEach(r => r.checked = (parseInt(r.value, 10) === v));
+  }
+
+  function setRandMode(v) {
+    randModeRadios.forEach(r => r.checked = (r.value === v));
+  }
+
+  // ---------- dual randomize ----------
+  function randomizeAlphaBeta() {
+    elAlpha.value = randUniform(-100, 100).toFixed(6);
+    elBeta.value = randUniform(-100, 100).toFixed(6);
+  }
+
+  function randomizeAllParams() {
+    // formula
+    elFormula.value = pick(Variants).id;
+
+    // alpha/beta
+    randomizeAlphaBeta();
+
+    // gamma (keep moderate most of the time for stability)
+    elGamma.value = randUniform(-1.5, 1.5).toFixed(6);
+
+    // delta
+    setDelta(Math.random() < 0.5 ? 0 : 1);
+
+    // orbits / iters / burn
+    elOrbits.value = String(pick([10, 25, 50, 60]));
+    elIters.value  = String(pick([2000, 4000, 8000, 12000, 16000]));
+    elBurn.value   = String(pick([0, 20, 50, 100, 200]));
+
+    // range / init range
+    elRangeR.value = String(pick([150, 200, 250, 300, 400, 600]));
+    elInitR.value  = String(pick([30, 50, 80, 100, 150]));
+
+    // colormap
+    elCmap.value = pick(Object.keys(ColorMaps));
+  }
+
+  function applyRandomizeModeIfEnabled() {
+    if (!elRandomize.checked) return;
+
+    if (getRandMode() === "ab") {
+      randomizeAlphaBeta();
+    } else {
+      randomizeAllParams();
+    }
+    syncUI();
+  }
+
+  // ---------- colormap to orbit colors ----------
+  function makeOrbitColors(N, cmapName) {
+    const cmap = ColorMaps[cmapName] || ColorMaps["Turbo"];
+    const cols = new Array(N);
+    if (N <= 1) {
+      cols[0] = cmap(0.5).map(x => x|0);
+      return cols;
+    }
+    for (let i=0;i<N;i++){
+      const t = i / (N - 1);
+      const c = cmap(t);
+      cols[i] = [c[0]|0, c[1]|0, c[2]|0];
+    }
+    return cols;
+  }
+
+  // ---------- draw ----------
+  function requestDraw() {
+    if (drawing || inMenu) return;
+    abortDraw = false;
+    drawHopalong();
+  }
+
+  function drawHopalong() {
+    drawing = true;
+
+    // auto randomize (based on mode)
+    applyRandomizeModeIfEnabled();
+
+    const a = +elAlpha.value;
+    const b = +elBeta.value;
+    const g = +elGamma.value;
+    const d = getDelta();
+
+    const variant = getVariant();
+    const N = parseInt(elOrbits.value, 10);
+    const iters = parseInt(elIters.value, 10);
+    const burn = parseInt(elBurn.value, 10);
+    const r = parseFloat(elRangeR.value);
+    const initR = parseFloat(elInitR.value);
+
+    const w = canvas.width, h = canvas.height;
+    const sx = (w - 1) / (2 * r);
+    const sy = (h - 1) / (2 * r);
+    const xoff = r, yoff = r;
+
+    const orbitColors = makeOrbitColors(N, elCmap.value);
+
+    // allocate storage for this render so we can re-draw with pan/zoom without recomputing
+    const maxPts = Math.max(0, N * Math.max(0, iters - burn));
+    const ptsXY = new Float32Array(maxPts * 2);
+    const ptOrbit = new Uint16Array(maxPts);
+    let ptCount = 0;
+
+    // reset view for a fresh render
+    resetView();
+
+
+    // clear buffer
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 255;
+    }
+
+    let orbitIdx = 0;
+
+    function stepFrame() {
+      if (abortDraw || inMenu) {
+        drawing = false;
+        ctx.putImageData(img, 0, 0);
+        return;
+      }
+
+      const orbitsPerFrame = 3;
+      let done = 0;
+
+      while (orbitIdx < N && done < orbitsPerFrame) {
+        let x = randUniform(-initR, initR);
+        let y = randUniform(-initR, initR);
+
+        const col = orbitColors[orbitIdx];
+        const rr = col[0], gg = col[1], bb = col[2];
+
+        // burn-in
+        for (let k = 0; k < burn; k++) {
+          const res = variant.step(x, y, a, b, g, d);
+          x = res[0]; y = res[1];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) { x = 0; y = 0; break; }
+        }
+
+        // plot
+        for (let k = burn; k < iters; k++) {
+          const res = variant.step(x, y, a, b, g, d);
+          x = res[0]; y = res[1];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) break;
+
+          // store world point for later pan/zoom redraw
+          if (ptCount < maxPts) { ptsXY[ptCount*2] = x; ptsXY[ptCount*2+1] = y; ptOrbit[ptCount] = orbitIdx; ptCount++; }
+
+          const px = (((x - viewPanX) + xoff) * (sx * viewZoom)) | 0;
+          const py = ((yoff - (y - viewPanY)) * (sy * viewZoom)) | 0;
+
+          if ((px >>> 0) < w && (py >>> 0) < h) {
+            setPixel(px, py, rr, gg, bb);
+          }
+
+          if ((k & 1023) === 0 && (abortDraw || inMenu)) break;
+        }
+
+        orbitIdx++;
+        done++;
+      }
+
+      ctx.putImageData(img, 0, 0);
+
+      if (orbitIdx < N) requestAnimationFrame(stepFrame);
+      else {
+        drawing = false;
+        ctx.putImageData(img, 0, 0);
+
+        // store last render data for view-only pan/zoom
+        lastPtsXY = ptsXY;
+        lastPtOrbit = ptOrbit;
+        lastPtCount = ptCount;
+        lastOrbitColors = orbitColors;
+        lastBaseR = r;
+
+        // log parameters for this render
+        addRenderEntry({
+          completed: true,
+          when: nowStamp(),
+          formulaId: variant.id,
+          formulaName: variant.name,
+          formulaDesc: variant.desc,
+          alpha: a,
+          beta: b,
+          gamma: g,
+          delta: d,
+          N: N,
+          iters: iters,
+          burn: burn,
+          rangeR: r,
+          initR: initR,
+          cmap: elCmap.value,
+          cmapCSS: cmapGradientCSS(elCmap.value),
+          autoRandomizeRaw: !!elRandomize.checked,
+          randModeRaw: getRandMode()
+        });
+      }
+    }
+
+    requestAnimationFrame(stepFrame);
+  }
+
+  // buttons
+  btnApply.addEventListener('click', () => {
+    syncUI();
+    showMenu(false);
+    showControls(false);
+    requestDraw();
+  });
+  btnClose.addEventListener('click', () => { showMenu(false); showControls(false); });
+
+  // Start with immediate draw
+  setTimeout(() => requestDraw(), 50);
+
+})();
+</script>
+</body>
+</html>
