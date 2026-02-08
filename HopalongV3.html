@@ -1,567 +1,656 @@
-import M5
-from M5 import *
-import m5ui
-import time
-import random
-import math
-
-# =========================================================
-# Hopalong (Martin) map - Wolfram notebook style
-#
-# Map (Wolfram):
-#   x_{n+1} = y_n - Sign[x_n] * Sqrt[Abs[b*x_n - c]]
-#   y_{n+1} = a - x_n
-#
-# IMU control:
-#   - Starts drawing immediately after baseline capture (no menu first)
-#   - Flat within tolerance  -> DRAW
-#   - Tilt beyond tolerance  -> ABORT draw immediately + show MENU
-#
-# Menu (only when tilted):
-#   - A : next item
-#   - B : decrement (tap=small; hold accelerates)
-#   - C : increment (tap=small; hold accelerates)
-#   - Lay flat again to draw with selected values
-#
-# Added (requested):
-#   - Presets like the notebook:
-#       * N_ORBITS preset: 10 / 25 / 50
-#       * N_ITERS preset: 2000 / 4000 / 8000
-#   - "Full range" toggle for initial points (FR) + range value (R)
-#       * FR=ON  -> initial points in [-100, +100]
-#       * FR=OFF -> initial points in [-R, +R]
-# =========================================================
-
-# -------------------- IMU settings --------------------
-TILT_ENTER_DEG = 5.0
-TILT_EXIT_DEG  = 6.0
-BASELINE_SAMPLES = 18
-# ------------------------------------------------------
-
-# -------------------- Wolfram-like defaults --------------------
-# Preset lists (like notebook)
-ORBITS_PRESETS = [10, 25, 50]
-ITERS_PRESETS  = [2000, 4000, 8000]
-
-N_ORBITS   = 25
-N_ITERS    = 8000
-BURN_IN    = 50
-
-RANDOMIZE  = True
-
-ALPHA = 1.000000
-BETA  = 19.000000
-DELTA = 0
-
-# Slider-like ranges (notebook)
-ALPHA_MIN, ALPHA_MAX = -100.0, 100.0
-BETA_MIN,  BETA_MAX  = -100.0, 100.0
-
-# Initial-point range controls (notebook-like FR/r)
-FULL_RANGE_INIT = True     # FR
-R_INIT = 100.0             # r (used when FULL_RANGE_INIT=False)
-
-INIT_FULL_MIN, INIT_FULL_MAX = -100.0, 100.0
-R_INIT_MIN, R_INIT_MAX = 1.0, 1000.0
-# ------------------------------------------------------
-
-PALETTE = [
-  0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0x00FFFF, 0xFF00FF,
-  0xFF8000, 0x80FF00, 0x0080FF, 0xFFFFFF, 0xC0C0C0, 0xFF40A0
-]
-
-page0 = None
-
-# UI state
-_menu = False
-_sel = 0
-_redraw = False
-_abort_draw = False
-_is_flat_state = True
-
-_base_pitch = 0.0
-_base_roll  = 0.0
-
-# Hold-repeat state for B/C
-_hold_btn = None
-_hold_start_ms = 0
-_hold_last_step_ms = 0
-
-
-# ---------------------- helpers ----------------------
-def _now_ms():
-  try:
-    return time.ticks_ms()
-  except:
-    return int(time.time() * 1000)
-
-def _clamp(v, lo, hi):
-  if v < lo: return lo
-  if v > hi: return hi
-  return v
-
-def _fmt_bool(v):
-  return "ON" if v else "OFF"
-
-def _cycle_prev(vals, cur):
-  # pick previous item in vals (or last)
-  try:
-    idx = vals.index(cur)
-  except:
-    idx = 0
-  return vals[idx - 1] if idx > 0 else vals[-1]
-
-def _cycle_next(vals, cur):
-  try:
-    idx = vals.index(cur)
-  except:
-    idx = 0
-  return vals[(idx + 1) % len(vals)]
-
-
-# ---------------------- IMU access ----------------------
-def imu_read_accel_g():
-  try:
-    ax, ay, az = Imu.getAccel()
-    return float(ax), float(ay), float(az)
-  except:
-    pass
-  try:
-    ax, ay, az = IMU.getAccel()
-    return float(ax), float(ay), float(az)
-  except:
-    pass
-  try:
-    ax, ay, az = M5.IMU.getAccel()
-    return float(ax), float(ay), float(az)
-  except:
-    pass
-  raise RuntimeError("IMU accel read not available (expected Imu/IMU/M5.IMU).")
-
-def accel_to_pitch_roll_deg(ax, ay, az):
-  denom = math.sqrt(ay*ay + az*az)
-  if denom < 1e-9:
-    denom = 1e-9
-  pitch = math.degrees(math.atan2(-ax, denom))
-  roll  = math.degrees(math.atan2(ay, az if abs(az) > 1e-9 else 1e-9))
-  return pitch, roll
-
-def compute_tilt_error_deg():
-  ax, ay, az = imu_read_accel_g()
-  p, r = accel_to_pitch_roll_deg(ax, ay, az)
-  dp = abs(p - _base_pitch)
-  dr = abs(r - _base_roll)
-  return dp, dr
-
-def update_flat_state():
-  global _is_flat_state
-  dp, dr = compute_tilt_error_deg()
-
-  if _is_flat_state:
-    if (dp > TILT_EXIT_DEG) or (dr > TILT_EXIT_DEG):
-      _is_flat_state = False
-  else:
-    if (dp <= TILT_ENTER_DEG) and (dr <= TILT_ENTER_DEG):
-      _is_flat_state = True
-
-
-# ---------------------- parameter getters/setters ----------------------
-def get_RANDOMIZE(): return RANDOMIZE
-def set_RANDOMIZE(v):
-  global RANDOMIZE
-  RANDOMIZE = bool(v)
-
-def get_ALPHA(): return ALPHA
-def set_ALPHA(v):
-  global ALPHA
-  ALPHA = float(_clamp(v, ALPHA_MIN, ALPHA_MAX))
-
-def get_BETA(): return BETA
-def set_BETA(v):
-  global BETA
-  BETA = float(_clamp(v, BETA_MIN, BETA_MAX))
-
-def get_DELTA(): return DELTA
-def set_DELTA(v):
-  global DELTA
-  DELTA = 0 if int(v) <= 0 else 1
-
-def get_ORBITS(): return N_ORBITS
-def set_ORBITS(v):
-  global N_ORBITS
-  N_ORBITS = int(max(1, min(200, v)))
-
-def get_ITERS(): return N_ITERS
-def set_ITERS(v):
-  global N_ITERS
-  N_ITERS = int(max(200, min(100000, v)))
-
-def get_BURNIN(): return BURN_IN
-def set_BURNIN(v):
-  global BURN_IN
-  BURN_IN = int(max(0, min(20000, v)))
-
-def get_FR(): return FULL_RANGE_INIT
-def set_FR(v):
-  global FULL_RANGE_INIT
-  FULL_RANGE_INIT = bool(v)
-
-def get_RINIT(): return R_INIT
-def set_RINIT(v):
-  global R_INIT
-  R_INIT = float(_clamp(v, R_INIT_MIN, R_INIT_MAX))
-
-
-# Menu: (label, getter, setter, step_fine, step_coarse, type)
-# type: bool | float | int | int01 | preset
-MENU = [
-  ("RANDOMIZE", get_RANDOMIZE, set_RANDOMIZE, 1,        1,        "bool"),
-  ("ALPHA (a)", get_ALPHA,     set_ALPHA,     0.001,    0.050,    "float"),
-  ("BETA  (b)", get_BETA,      set_BETA,      0.001,    0.050,    "float"),
-  ("DELTA (c)", get_DELTA,     set_DELTA,     1,        1,        "int01"),
-
-  # Notebook-like presets
-  ("ORBITS 10/25/50", get_ORBITS, set_ORBITS, 0, 0, "preset_orbits"),
-  ("ITERS 2/4/8k",     get_ITERS,  set_ITERS,  0, 0, "preset_iters"),
-
-  # Still allow fine tuning if you want
-  ("N_ORBITS",  get_ORBITS,  set_ORBITS,  1,        10,       "int"),
-  ("N_ITERS",   get_ITERS,   set_ITERS,   200,      2000,     "int"),
-
-  ("BURN_IN",   get_BURNIN,  set_BURNIN,  5,        50,       "int"),
-
-  # Notebook-like FR / r initial range control
-  ("FR init",   get_FR,      set_FR,      1,        1,        "bool"),
-  ("r init",    get_RINIT,   set_RINIT,   0.5,      10.0,     "float"),
-]
-
-
-# ---------------------- Hopalong (Wolfram) map ----------------------
-def hopalong_step(x, y, a, b, c):
-  s = 1 if x > 0 else (-1 if x < 0 else 0)
-  return (y - s * math.sqrt(abs(b * x - c)),
-          a - x)
-
-def gen_params():
-  a = random.uniform(ALPHA_MIN, ALPHA_MAX)
-  b = random.uniform(BETA_MIN,  BETA_MAX)
-  c = 0 if random.getrandbits(1) == 0 else 1
-  return a, b, c
-
-def init_point_range():
-  if FULL_RANGE_INIT:
-    return INIT_FULL_MIN, INIT_FULL_MAX
-  r = R_INIT
-  return -r, r
-
-def gen_initial_points(n):
-  lo, hi = init_point_range()
-  pts = []
-  for _ in range(n):
-    pts.append((random.uniform(lo, hi), random.uniform(lo, hi)))
-  return pts
-
-def compute_bounds(a, b, c, pts, n_iters, burn_in):
-  xmin =  1e30
-  xmax = -1e30
-  ymin =  1e30
-  ymax = -1e30
-
-  for (x0, y0) in pts:
-    x, y = x0, y0
-    for k in range(n_iters):
-      x, y = hopalong_step(x, y, a, b, c)
-      if k < burn_in:
-        continue
-      if x < xmin: xmin = x
-      if x > xmax: xmax = x
-      if y < ymin: ymin = y
-      if y > ymax: ymax = y
-
-  if (xmax - xmin) < 1e-9: xmax = xmin + 1.0
-  if (ymax - ymin) < 1e-9: ymax = ymin + 1.0
-  return xmin, xmax, ymin, ymax
-
-def plot_orbits(a, b, c, pts, n_iters, burn_in):
-  global _abort_draw, _menu, _redraw
-
-  w = Display.width()
-  h = Display.height()
-
-  xmin, xmax, ymin, ymax = compute_bounds(a, b, c, pts, n_iters, burn_in)
-
-  mx = 0.03 * (xmax - xmin)
-  my = 0.03 * (ymax - ymin)
-  xmin -= mx; xmax += mx
-  ymin -= my; ymax += my
-
-  sx = (w - 1) / (xmax - xmin)
-  sy = (h - 1) / (ymax - ymin)
-
-  Display.clear(0x000000)
-
-  for i, (x0, y0) in enumerate(pts):
-    M5.update()
-    update_flat_state()
-    if not _is_flat_state:
-      _abort_draw = True
-      _menu = True
-      _redraw = False
-      return
-
-    color = PALETTE[i % len(PALETTE)]
-    x, y = x0, y0
-
-    for k in range(n_iters):
-      if (k & 63) == 0:
-        M5.update()
-        update_flat_state()
-        if not _is_flat_state:
-          _abort_draw = True
-          _menu = True
-          _redraw = False
-          return
-
-      x, y = hopalong_step(x, y, a, b, c)
-      if k < burn_in:
-        continue
-
-      px = int((x - xmin) * sx)
-      py = int((ymax - y) * sy)
-      if 0 <= px < w and 0 <= py < h:
-        Display.drawPixel(px, py, color)
-
-  Display.setCursor(2, 2)
-  Display.setTextColor(0xFFFFFF, 0x000000)
-  lo, hi = init_point_range()
-  Display.print("a={:.6f} b={:.6f} c={}  init=[{:.1f},{:.1f}]".format(a, b, c, lo, hi))
-
-def draw_once():
-  global _abort_draw
-  _abort_draw = False
-
-  if RANDOMIZE:
-    a, b, c = gen_params()
-  else:
-    a, b, c = ALPHA, BETA, DELTA
-
-  pts = gen_initial_points(N_ORBITS)
-  plot_orbits(a, b, c, pts, N_ITERS, BURN_IN)
-
-
-# ---------------------- Menu UI ----------------------
-def draw_menu():
-  Display.clear(0x101010)
-  Display.setTextColor(0xFFFFFF, 0x101010)
-  Display.setCursor(2, 2)
-  Display.print("TILT MENU: A=Next  B=-  C=+   (Lay flat to draw)")
-
-  y = 24
-  for i, item in enumerate(MENU):
-    label, getter, _, _, _, typ = item
-    is_sel = (i == _sel)
-
-    if is_sel:
-      Display.fillRect(0, y - 2, Display.width(), 18, 0x404040)
-
-    Display.setCursor(4, y)
-    Display.setTextColor(0xFFFFFF, 0x404040 if is_sel else 0x101010)
-
-    v = getter()
-
-    if typ == "bool":
-      s = _fmt_bool(v)
-    elif typ == "float":
-      s = "{:.6f}".format(v)
-    elif typ == "preset_orbits":
-      s = "{} (preset)".format(v)
-    elif typ == "preset_iters":
-      s = "{} (preset)".format(v)
-    else:
-      s = "{}".format(v)
-
-    Display.print("{:<14s} {}".format(label, s))
-    y += 18
-
-def _repeat_profile(held_ms):
-  # (repeat interval ms, step scale)
-  if held_ms < 250:
-    return 999999, 1.0
-  if held_ms < 700:
-    return 170, 2.0
-  if held_ms < 1300:
-    return 110, 6.0
-  return 70, 14.0
-
-def menu_step(direction, held_ms, initial_click=False):
-  label, getter, setter, step_fine, step_coarse, typ = MENU[_sel]
-
-  # presets (cycle)
-  if typ == "preset_orbits":
-    if initial_click:
-      cur = getter()
-      setter(_cycle_prev(ORBITS_PRESETS, cur) if direction < 0 else _cycle_next(ORBITS_PRESETS, cur))
-    return
-
-  if typ == "preset_iters":
-    if initial_click:
-      cur = getter()
-      setter(_cycle_prev(ITERS_PRESETS, cur) if direction < 0 else _cycle_next(ITERS_PRESETS, cur))
-    return
-
-  # toggles
-  if typ == "bool":
-    if initial_click:
-      setter(not getter())
-    return
-
-  if typ == "int01":
-    if initial_click:
-      setter(0 if getter() == 1 else 1)
-    return
-
-  # numeric
-  v = getter()
-  base_step = step_fine if held_ms < 600 else step_coarse
-  _, scale = _repeat_profile(held_ms)
-  step = base_step * scale
-  setter(v + direction * step)
-
-def handle_menu_buttons():
-  global _sel, _hold_btn, _hold_start_ms, _hold_last_step_ms
-
-  if BtnA.wasPressed():
-    _sel = (_sel + 1) % len(MENU)
-    draw_menu()
-    return
-
-  now = _now_ms()
-
-  # B: decrement
-  if BtnB.wasPressed():
-    _hold_btn = 'B'
-    _hold_start_ms = now
-    _hold_last_step_ms = now
-    menu_step(-1, 0, initial_click=True)
-    draw_menu()
-    return
-
-  if BtnB.isPressed() and _hold_btn == 'B':
-    held = now - _hold_start_ms
-    interval, _ = _repeat_profile(held)
-    if now - _hold_last_step_ms >= interval:
-      _hold_last_step_ms = now
-      menu_step(-1, held, initial_click=False)
-      draw_menu()
-      return
-
-  if (not BtnB.isPressed()) and _hold_btn == 'B':
-    _hold_btn = None
-
-  # C: increment
-  if BtnC.wasPressed():
-    _hold_btn = 'C'
-    _hold_start_ms = now
-    _hold_last_step_ms = now
-    menu_step(+1, 0, initial_click=True)
-    draw_menu()
-    return
-
-  if BtnC.isPressed() and _hold_btn == 'C':
-    held = now - _hold_start_ms
-    interval, _ = _repeat_profile(held)
-    if now - _hold_last_step_ms >= interval:
-      _hold_last_step_ms = now
-      menu_step(+1, held, initial_click=False)
-      draw_menu()
-      return
-
-  if (not BtnC.isPressed()) and _hold_btn == 'C':
-    _hold_btn = None
-
-
-# ---------------------- Startup baseline capture ----------------------
-def capture_flat_baseline():
-  global _base_pitch, _base_roll
-
-  Display.clear(0x000000)
-  Display.setCursor(2, 2)
-  Display.setTextColor(0xFFFFFF, 0x000000)
-  Display.print("Calibrating flat...")
-
-  ps = 0.0
-  rs = 0.0
-  got = 0
-
-  for _ in range(BASELINE_SAMPLES):
-    M5.update()
-    ax, ay, az = imu_read_accel_g()
-    p, r = accel_to_pitch_roll_deg(ax, ay, az)
-    ps += p
-    rs += r
-    got += 1
-    time.sleep_ms(15)
-
-  _base_pitch = ps / got
-  _base_roll  = rs / got
-
-
-# ---------------------- UIFlow2 boilerplate ----------------------
-def setup():
-  global page0, _menu, _sel, _redraw, _is_flat_state
-
-  M5.begin()
-  Widgets.setRotation(1)
-  m5ui.init()
-  page0 = m5ui.M5Page(bg_c=0x000000)
-  page0.screen_load()
-
-  capture_flat_baseline()
-
-  _is_flat_state = True
-  update_flat_state()
-
-  _sel = 0
-  if _is_flat_state:
-    _menu = False
-    _redraw = True   # draw immediately
-  else:
-    _menu = True
-    _redraw = False
-    draw_menu()
-
-def loop():
-  global _menu, _redraw
-
-  M5.update()
-  update_flat_state()
-
-  if _is_flat_state:
-    if _menu:
-      _menu = False
-      _redraw = True
-    if _redraw:
-      _redraw = False
-      draw_once()
-  else:
-    if not _menu:
-      _menu = True
-      _redraw = False
-      draw_menu()
-    else:
-      handle_menu_buttons()
-
-  time.sleep_ms(5)
-
-if __name__ == '__main__':
-  try:
-    setup()
-    while True:
-      loop()
-  except (Exception, KeyboardInterrupt) as e:
-    try:
-      m5ui.deinit()
-      from utility import print_error_msg
-      print_error_msg(e)
-    except ImportError:
-      print("please update to latest firmware")
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Hopalong Variations — Dual Randomize</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; background: #000; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+
+    #backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.0);
+      display: none;
+      z-index: 9;
+      touch-action: none;
+    }
+
+    #menu {
+      position: fixed;
+      inset: 12px;
+      max-width: 860px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 16px;
+      background: rgba(16,16,16,.92);
+      color: #fff;
+      padding: 14px 14px 10px 14px;
+      display: none;
+      overflow: auto;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      z-index: 10;
+    }
+
+    #menuTop {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      padding: 4px 0 10px 0;
+      background: rgba(16,16,16,.92);
+      z-index: 11;
+    }
+    #menuTop h2 { margin: 0; font-size: 16px; font-weight: 800; }
+    #menuBtns { display: flex; gap: 10px; align-items: center; }
+    button {
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.08);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 700;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 190px 1fr 170px;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .row:last-child { border-bottom: none; }
+    .row label { opacity: .9; }
+    .row output { text-align: right; font-variant-numeric: tabular-nums; opacity: .95; }
+    input[type="range"], select { width: 100%; }
+
+    .cmPreview {
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: linear-gradient(90deg, #000, #fff);
+    }
+    .subnote { font-size: 12px; opacity: .75; margin-top: 10px; line-height: 1.35; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="backdrop"></div>
+
+<div id="menu">
+  <div id="menuTop">
+    <h2>Hopalong (dual randomize)</h2>
+    <div id="menuBtns">
+      <button id="btnApply">Apply + Draw</button>
+      <button id="btnClose">Close</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Formula</label>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <select id="formula"></select>
+      <div style="font-size:12px; opacity:.8" id="formulaDesc"></div>
+    </div>
+    <output id="formulaOut">Classic (sqrt)</output>
+  </div>
+
+  <div class="row">
+    <label>Randomize mode</label>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+      <label style="display:flex; gap:6px; align-items:center;">
+        <input type="radio" name="randMode" value="ab" checked />
+        α/β only
+      </label>
+      <label style="display:flex; gap:6px; align-items:center;">
+        <input type="radio" name="randMode" value="all" />
+        All params
+      </label>
+    </div>
+    <output id="randModeOut">α/β only</output>
+  </div>
+
+  <div class="row">
+    <label>Auto-randomize</label>
+    <input id="randomize" type="checkbox" />
+    <output id="randomizeOut">ON</output>
+  </div>
+
+  <div class="row">
+    <label>α (alpha)</label>
+    <input id="alpha" type="range" min="-100" max="100" step="0.001" value="1.0" />
+    <output id="alphaOut">1.000000</output>
+  </div>
+
+  <div class="row">
+    <label>β (beta)</label>
+    <input id="beta" type="range" min="-100" max="100" step="0.001" value="19.0" />
+    <output id="betaOut">19.000000</output>
+  </div>
+
+  <div class="row">
+    <label>γ (gamma)</label>
+    <input id="gamma" type="range" min="-5" max="5" step="0.001" value="0.0" />
+    <output id="gammaOut">0.000000</output>
+  </div>
+
+  <div class="row">
+    <label>δ (delta)</label>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <label style="display:flex; gap:6px; align-items:center;"><input type="radio" name="delta" value="0" checked />0</label>
+      <label style="display:flex; gap:6px; align-items:center;"><input type="radio" name="delta" value="1" />1</label>
+    </div>
+    <output id="deltaOut">0</output>
+  </div>
+
+  <div class="row">
+    <label>Orbits (N)</label>
+    <input id="orbits" type="range" min="1" max="80" step="1" value="25" />
+    <output id="orbitsOut">25</output>
+  </div>
+
+  <div class="row">
+    <label>Iters</label>
+    <input id="iters" type="range" min="500" max="50000" step="100" value="8000" />
+    <output id="itersOut">8000</output>
+  </div>
+
+  <div class="row">
+    <label>Burn-in</label>
+    <input id="burn" type="range" min="0" max="5000" step="5" value="50" />
+    <output id="burnOut">50</output>
+  </div>
+
+  <div class="row">
+    <label>Range r</label>
+    <input id="rangeR" type="range" min="20" max="2000" step="1" value="300" />
+    <output id="rangeROut">300</output>
+  </div>
+
+  <div class="row">
+    <label>Init range</label>
+    <input id="initR" type="range" min="10" max="300" step="1" value="100" />
+    <output id="initROut">100</output>
+  </div>
+
+  <div class="row">
+    <label>Color map</label>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <select id="cmap"></select>
+      <div class="cmPreview" id="cmPreview"></div>
+    </div>
+    <output id="cmapOut">Turbo</output>
+  </div>
+
+  <div class="subnote">
+    Gestures:
+    <br>• Short tap (menu hidden): <b>redraw</b>
+    <br>• Long press (~0.5s): <b>toggle menu</b>
+    <br>• Menu open: <b>tap outside</b> closes + draws
+    <br><br>
+    Randomize:
+    <br>• If Auto-randomize ON, each redraw randomizes using the selected mode.
+    <br>• α/β only mode keeps formula, γ, δ, N, iters, burn, range, init, colormap unchanged.
+    <br>• All params mode randomizes <i>everything in the menu</i> (formula, γ, δ, N, iters, burn, range, init, colormap) as well as α/β.
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- canvas / pixel buffer ----------
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let img, buf;
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    ctx.imageSmoothingEnabled = false;
+    img = ctx.createImageData(canvas.width, canvas.height);
+    buf = img.data;
+    clearScreen();
+  }
+  window.addEventListener('resize', resize, { passive: true });
+
+  function clearScreen() {
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  resize();
+
+  function setPixel(x, y, r, g, b) {
+    const idx = (y * canvas.width + x) * 4;
+    buf[idx] = r; buf[idx+1] = g; buf[idx+2] = b; buf[idx+3] = 255;
+  }
+
+  // ---------- UI / menu ----------
+  const menu = document.getElementById('menu');
+  const backdrop = document.getElementById('backdrop');
+  const btnApply = document.getElementById('btnApply');
+  const btnClose = document.getElementById('btnClose');
+
+  const elFormula = document.getElementById('formula');
+  const elFormulaDesc = document.getElementById('formulaDesc');
+  const outFormula = document.getElementById('formulaOut');
+
+  const elRandModeOut = document.getElementById('randModeOut');
+  const randModeRadios = Array.from(document.querySelectorAll('input[name="randMode"]'));
+
+  const elRandomize = document.getElementById('randomize');
+  const elAlpha = document.getElementById('alpha');
+  const elBeta = document.getElementById('beta');
+  const elGamma = document.getElementById('gamma');
+  const elOrbits = document.getElementById('orbits');
+  const elIters = document.getElementById('iters');
+  const elBurn = document.getElementById('burn');
+  const elRangeR = document.getElementById('rangeR');
+  const elInitR = document.getElementById('initR');
+  const elCmap = document.getElementById('cmap');
+  const cmPreview = document.getElementById('cmPreview');
+
+  const outRandomize = document.getElementById('randomizeOut');
+  const outAlpha = document.getElementById('alphaOut');
+  const outBeta = document.getElementById('betaOut');
+  const outGamma = document.getElementById('gammaOut');
+  const outDelta = document.getElementById('deltaOut');
+  const outOrbits = document.getElementById('orbitsOut');
+  const outIters = document.getElementById('itersOut');
+  const outBurn = document.getElementById('burnOut');
+  const outRangeR = document.getElementById('rangeROut');
+  const outInitR = document.getElementById('initROut');
+  const outCmap = document.getElementById('cmapOut');
+
+  const deltaRadios = Array.from(document.querySelectorAll('input[name="delta"]'));
+  function getDelta() {
+    const r = deltaRadios.find(x => x.checked);
+    return r ? parseInt(r.value, 10) : 0;
+  }
+
+  function getRandMode() {
+    const r = randModeRadios.find(x => x.checked);
+    return r ? r.value : "ab";
+  }
+
+  // ---------- colormaps ----------
+  function clamp01(x){ return x < 0 ? 0 : (x > 1 ? 1 : x); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function lerp3(c1,c2,t){ return [lerp(c1[0],c2[0],t), lerp(c1[1],c2[1],t), lerp(c1[2],c2[2],t)]; }
+  function fromStops(stops, t){
+    t = clamp01(t);
+    for (let i=0; i<stops.length-1; i++){
+      const a = stops[i], b = stops[i+1];
+      if (t >= a[0] && t <= b[0]){
+        const u = (t - a[0]) / (b[0] - a[0] || 1);
+        return lerp3(a[1], b[1], u);
+      }
+    }
+    return stops[stops.length-1][1];
+  }
+
+  const ColorMaps = {
+    "Turbo": (t) => fromStops([
+      [0.00,[48,18,59]],[0.10,[50,44,125]],[0.20,[32,96,189]],[0.30,[41,158,179]],
+      [0.40,[93,201,99]],[0.50,[177,222,44]],[0.60,[236,199,24]],[0.70,[250,144,25]],
+      [0.80,[243,85,38]],[0.90,[206,41,57]],[1.00,[122,4,3]]
+    ], t),
+    "Viridis": (t) => fromStops([[0,[68,1,84]],[.25,[59,82,139]],[.5,[33,145,140]],[.75,[94,201,98]],[1,[253,231,37]]], t),
+    "Plasma": (t) => fromStops([[0,[13,8,135]],[.25,[126,3,167]],[.5,[203,71,119]],[.75,[248,149,64]],[1,[240,249,33]]], t),
+    "Inferno": (t) => fromStops([[0,[0,0,4]],[.25,[87,15,109]],[.5,[187,55,84]],[.75,[249,142,8]],[1,[252,255,164]]], t),
+    "Magma": (t) => fromStops([[0,[0,0,4]],[.25,[78,18,123]],[.5,[182,54,121]],[.75,[251,136,97]],[1,[252,253,191]]], t),
+    "Gray": (t) => { const v = Math.round(255*clamp01(t)); return [v,v,v]; },
+    "Rainbow": (t) => {
+      t = clamp01(t);
+      const h = (1 - t) * 240;
+      const c = 1, hp = h/60, x = c*(1-Math.abs((hp%2)-1));
+      let r=0,g=0,b=0;
+      if (hp<1){ r=c; g=x; } else if (hp<2){ r=x; g=c; }
+      else if (hp<3){ g=c; b=x; } else if (hp<4){ g=x; b=c; }
+      else if (hp<5){ r=x; b=c; } else { r=c; b=x; }
+      return [Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+    },
+    "Heat": (t) => fromStops([[0,[0,0,0]],[.33,[180,0,0]],[.66,[255,160,0]],[1,[255,255,255]]], t),
+    "Ocean": (t) => fromStops([[0,[0,0,0]],[.25,[0,20,70]],[.5,[0,90,160]],[.75,[40,180,220]],[1,[220,250,255]]], t)
+  };
+
+  function initColorMapSelect(){
+    for (const n of Object.keys(ColorMaps)){
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      elCmap.appendChild(opt);
+    }
+    elCmap.value = "Turbo";
+  }
+
+  function updateCmapPreview(){
+    const name = elCmap.value;
+    outCmap.textContent = name;
+    const stops = [];
+    for (let i=0;i<=10;i++){
+      const t = i/10;
+      const [r,g,b] = ColorMaps[name](t);
+      stops.push(`rgb(${r|0},${g|0},${b|0}) ${Math.round(t*100)}%`);
+    }
+    cmPreview.style.background = `linear-gradient(90deg, ${stops.join(',')})`;
+  }
+
+  initColorMapSelect();
+  updateCmapPreview();
+
+  // ---------- Variants ----------
+  const Variants = [
+    { id:"classic_sqrt", name:"Classic (sqrt)", desc:"Wolfram/Martin: x' = y − sgn(x)·sqrt(|βx − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)), a - x ]; } },
+    { id:"sqrt_plus_gamma_y", name:"Classic + γy", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γy, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*y, a - x ]; } },
+    { id:"sqrt_plus_gamma_x", name:"Classic + γx", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γx, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*x, a - x ]; } },
+    { id:"abs_no_sqrt", name:"No sqrt (|·|)", desc:"x' = y − sgn(x)·|βx − δ|, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.abs(b*x-d), a - x ]; } },
+    { id:"pow_p", name:"Power p (γ controls p)", desc:"Replace sqrt with |·|^p, p mapped from γ.",
+      step:(x,y,a,b,g,d)=>{ const p=Math.max(0.15,Math.min(2.0, (g+5)/10*1.6+0.2)); const s=x>0?1:(x<0?-1:0); return [ y - s*Math.pow(Math.abs(b*x-d), p), a - x ]; } },
+    { id:"swap_feedback", name:"Swap feedback", desc:"Kick uses y: x' = y − sgn(y)·sqrt(|βy − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=y>0?1:(y<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*y-d)), a - x ]; } },
+    { id:"mix_inside", name:"sqrt(|β(x+γy)−δ|)", desc:"Mix x,y inside sqrt: x' = y − sgn(x)·sqrt(|β(x+γy) − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*(x+g*y)-d)), a - x ]; } },
+    { id:"trig_kick", name:"Trig kick", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·sin(x), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*Math.sin(x), a - x ]; } },
+    { id:"damped", name:"Damped (|γ|)", desc:"x' = (y − sgn(x)·sqrt(|βx − δ|))·(1−|γ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const base=y - s*Math.sqrt(Math.abs(b*x-d)); const damp=1-Math.min(0.95,Math.abs(g)); return [ base*damp, a - x ]; } },
+    { id:"y_update_variant", name:"Alt y update", desc:"Keep classic x', change y' = α − y (different feedback)",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const xn=y - s*Math.sqrt(Math.abs(b*x-d)); const yn=a - y; return [xn, yn]; } }
+  ];
+
+  function initFormulaSelect(){
+    for (const v of Variants){
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.name;
+      elFormula.appendChild(opt);
+    }
+    elFormula.value = "classic_sqrt";
+  }
+
+  function getVariant() {
+    const id = elFormula.value;
+    return Variants.find(v => v.id === id) || Variants[0];
+  }
+
+  function updateFormulaDesc(){
+    const v = getVariant();
+    outFormula.textContent = v.name;
+    elFormulaDesc.textContent = v.desc;
+  }
+
+  initFormulaSelect();
+  updateFormulaDesc();
+
+  // ---------- sync UI ----------
+  function syncUI() {
+    outRandomize.textContent = elRandomize.checked ? "ON" : "OFF";
+    outAlpha.textContent = (+elAlpha.value).toFixed(6);
+    outBeta.textContent = (+elBeta.value).toFixed(6);
+    outGamma.textContent = (+elGamma.value).toFixed(6);
+    outDelta.textContent = String(getDelta());
+    outOrbits.textContent = String(parseInt(elOrbits.value, 10));
+    outIters.textContent = String(parseInt(elIters.value, 10));
+    outBurn.textContent = String(parseInt(elBurn.value, 10));
+    outRangeR.textContent = String(parseInt(elRangeR.value, 10));
+    outInitR.textContent = String(parseInt(elInitR.value, 10));
+    elRandModeOut.textContent = (getRandMode() === "ab") ? "α/β only" : "All params";
+    updateCmapPreview();
+    updateFormulaDesc();
+  }
+
+  [
+    elFormula, ...randModeRadios, elRandomize, elAlpha, elBeta, elGamma,
+    elOrbits, elIters, elBurn, elRangeR, elInitR, elCmap, ...deltaRadios
+  ].forEach(el => el.addEventListener('input', syncUI));
+
+  elCmap.addEventListener('change', syncUI);
+  elFormula.addEventListener('change', syncUI);
+
+  syncUI();
+
+  // ---------- menu show/hide ----------
+  function showMenu(show) {
+    menu.style.display = show ? 'block' : 'none';
+    backdrop.style.display = show ? 'block' : 'none';
+    inMenu = show;
+  }
+
+  backdrop.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    abortDraw = true;
+    showMenu(false);
+    requestDraw();
+  }, { passive: false });
+
+  // ---------- gesture handling ----------
+  let inMenu = false;
+  let drawing = false;
+  let abortDraw = false;
+
+  const LONG_PRESS_MS = 520;
+  let pressTimer = null;
+  let moved = false;
+
+  function onPressStart() {
+    moved = false;
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      abortDraw = true;
+      showMenu(true);
+    }, LONG_PRESS_MS);
+  }
+
+  function onPressMove() {
+    moved = true;
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  }
+
+  function onPressEnd() {
+    if (!pressTimer) return;
+    clearTimeout(pressTimer);
+    pressTimer = null;
+    if (!moved && !inMenu) requestDraw();
+  }
+
+  canvas.addEventListener('pointerdown', onPressStart, { passive: true });
+  canvas.addEventListener('pointermove', onPressMove, { passive: true });
+  canvas.addEventListener('pointerup', onPressEnd, { passive: true });
+  canvas.addEventListener('pointercancel', onPressEnd, { passive: true });
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // ---------- helpers ----------
+  function randUniform(lo, hi) { return lo + Math.random() * (hi - lo); }
+  function randInt(lo, hi) { return Math.floor(lo + Math.random() * (hi - lo + 1)); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function setDelta(v) {
+    deltaRadios.forEach(r => r.checked = (parseInt(r.value, 10) === v));
+  }
+
+  function setRandMode(v) {
+    randModeRadios.forEach(r => r.checked = (r.value === v));
+  }
+
+  // ---------- dual randomize ----------
+  function randomizeAlphaBeta() {
+    elAlpha.value = randUniform(-100, 100).toFixed(6);
+    elBeta.value = randUniform(-100, 100).toFixed(6);
+  }
+
+  function randomizeAllParams() {
+    // formula
+    elFormula.value = pick(Variants).id;
+
+    // alpha/beta
+    randomizeAlphaBeta();
+
+    // gamma (keep moderate most of the time for stability)
+    elGamma.value = randUniform(-1.5, 1.5).toFixed(6);
+
+    // delta
+    setDelta(Math.random() < 0.5 ? 0 : 1);
+
+    // orbits / iters / burn
+    elOrbits.value = String(pick([10, 25, 50, 60]));
+    elIters.value  = String(pick([2000, 4000, 8000, 12000, 16000]));
+    elBurn.value   = String(pick([0, 20, 50, 100, 200]));
+
+    // range / init range
+    elRangeR.value = String(pick([150, 200, 250, 300, 400, 600]));
+    elInitR.value  = String(pick([30, 50, 80, 100, 150]));
+
+    // colormap
+    elCmap.value = pick(Object.keys(ColorMaps));
+  }
+
+  function applyRandomizeModeIfEnabled() {
+    if (!elRandomize.checked) return;
+
+    if (getRandMode() === "ab") {
+      randomizeAlphaBeta();
+    } else {
+      randomizeAllParams();
+    }
+    syncUI();
+  }
+
+  // ---------- colormap to orbit colors ----------
+  function makeOrbitColors(N, cmapName) {
+    const cmap = ColorMaps[cmapName] || ColorMaps["Turbo"];
+    const cols = new Array(N);
+    if (N <= 1) {
+      cols[0] = cmap(0.5).map(x => x|0);
+      return cols;
+    }
+    for (let i=0;i<N;i++){
+      const t = i / (N - 1);
+      const c = cmap(t);
+      cols[i] = [c[0]|0, c[1]|0, c[2]|0];
+    }
+    return cols;
+  }
+
+  // ---------- draw ----------
+  function requestDraw() {
+    if (drawing || inMenu) return;
+    abortDraw = false;
+    drawHopalong();
+  }
+
+  function drawHopalong() {
+    drawing = true;
+
+    // auto randomize (based on mode)
+    applyRandomizeModeIfEnabled();
+
+    const a = +elAlpha.value;
+    const b = +elBeta.value;
+    const g = +elGamma.value;
+    const d = getDelta();
+
+    const variant = getVariant();
+    const N = parseInt(elOrbits.value, 10);
+    const iters = parseInt(elIters.value, 10);
+    const burn = parseInt(elBurn.value, 10);
+    const r = parseFloat(elRangeR.value);
+    const initR = parseFloat(elInitR.value);
+
+    const w = canvas.width, h = canvas.height;
+    const sx = (w - 1) / (2 * r);
+    const sy = (h - 1) / (2 * r);
+    const xoff = r, yoff = r;
+
+    const orbitColors = makeOrbitColors(N, elCmap.value);
+
+    // clear buffer
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 255;
+    }
+
+    let orbitIdx = 0;
+
+    function stepFrame() {
+      if (abortDraw || inMenu) {
+        drawing = false;
+        ctx.putImageData(img, 0, 0);
+        return;
+      }
+
+      const orbitsPerFrame = 3;
+      let done = 0;
+
+      while (orbitIdx < N && done < orbitsPerFrame) {
+        let x = randUniform(-initR, initR);
+        let y = randUniform(-initR, initR);
+
+        const col = orbitColors[orbitIdx];
+        const rr = col[0], gg = col[1], bb = col[2];
+
+        // burn-in
+        for (let k = 0; k < burn; k++) {
+          const res = variant.step(x, y, a, b, g, d);
+          x = res[0]; y = res[1];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) { x = 0; y = 0; break; }
+        }
+
+        // plot
+        for (let k = burn; k < iters; k++) {
+          const res = variant.step(x, y, a, b, g, d);
+          x = res[0]; y = res[1];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) break;
+
+          const px = ((x + xoff) * sx) | 0;
+          const py = ((yoff - y) * sy) | 0;
+
+          if ((px >>> 0) < w && (py >>> 0) < h) {
+            setPixel(px, py, rr, gg, bb);
+          }
+
+          if ((k & 1023) === 0 && (abortDraw || inMenu)) break;
+        }
+
+        orbitIdx++;
+        done++;
+      }
+
+      ctx.putImageData(img, 0, 0);
+
+      if (orbitIdx < N) requestAnimationFrame(stepFrame);
+      else {
+        drawing = false;
+        ctx.putImageData(img, 0, 0);
+      }
+    }
+
+    requestAnimationFrame(stepFrame);
+  }
+
+  // buttons
+  btnApply.addEventListener('click', () => {
+    syncUI();
+    showMenu(false);
+    requestDraw();
+  });
+  btnClose.addEventListener('click', () => showMenu(false));
+
+  // Start with immediate draw
+  setTimeout(() => requestDraw(), 50);
+
+})();
+</script>
+</body>
+</html>
