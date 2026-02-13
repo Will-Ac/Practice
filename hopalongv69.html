@@ -1,0 +1,2606 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
+<title>Hopalong</title>
+<style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; background: #000; }
+html, body, button, input, select, textarea { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+
+
+    #modePill{
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 12;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(16,16,16,.78);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+      touch-action: manipulation;
+    }
+    #modePill #modeBtn{ padding: 10px 12px; border-radius: 999px; }
+    #modePill #modeLbl{ font-weight: 800; font-size: 12px; letter-spacing: .08em; opacity: .9; }
+
+    #backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.0);
+      display: none;
+      z-index: 9;
+      touch-action: none;
+    }
+
+    #menu {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      bottom: 12px;
+      left: auto;
+      width: min(34vw, 520px);
+      min-width: 340px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 16px;
+      background: rgba(16,16,16,.92);
+      color: #fff;
+      padding: 14px 14px 10px 14px;
+      display: none;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      z-index: 10;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
+    }
+
+
+    @media (max-width: 720px){
+      #menu{
+        width: 92vw;
+        min-width: 0;
+        right: 12px;
+        left: 12px;
+      }
+    }
+
+    #menuTop {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      padding: 4px 0 10px 0;
+      background: rgba(16,16,16,.92);
+      z-index: 11;
+    }
+    #menuTop h2 { margin: 0; font-size: 16px; font-weight: 800; }
+    #menuBtns { display: flex; gap: 10px; align-items: center; }
+    button {
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.08);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 700;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 26px 140px 1fr 80px;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .row:last-child { border-bottom: none; }
+    .row label { opacity: .9; }
+    .row output { text-align: right; font-variant-numeric: tabular-nums; opacity: .95; }
+    input[type="range"], select { width: 100%; }
+
+    
+  /* Limit formula dropdown hit-area (Safari/iOS otherwise makes the whole column clickable) */
+  #formula{width:240px;max-width:100%;justify-self:start;}
+.cmPreview {
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: linear-gradient(90deg, #000, #fff);
+    }
+    .subnote { font-size: 12px; opacity: .75; margin-top: 10px; line-height: 1.35; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  
+    #renderInfo{
+      -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+      position: fixed;
+      display: none; /* hidden for clean screen */
+      left: 12px;
+      right: 170px; /* leave room for view pad */
+      bottom: 12px;
+      max-width: 720px;
+      max-height: 18vh; /* smaller */
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 14px;
+      background: rgba(16,16,16,.70);
+      color: #fff;
+      padding: 8px 10px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      z-index: 8;
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+    }
+    #renderInfo .riEntry{
+      border-top: 1px solid rgba(255,255,255,.10);
+      padding: 8px 8px;
+      margin: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #renderInfo .riEntry:first-child{ border-top: none; padding-top: 0; margin-top: 0; }
+    #renderInfo .riHdr{
+      display:flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 16px;
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+    #renderInfo .riHdr b{ font-size: 13px; }
+    #renderInfo .riHdr span{ font-size: 12px; opacity:.75; }
+    #renderInfo .riGrid{
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 4px 10px;
+      margin-top: 6px;
+      font-size: 16px;
+      line-height: 1.25;
+    }
+    #renderInfo .riKey{ font-size: 12px; opacity: .78; }
+    #renderInfo .riVal{ font-size: 12px; font-variant-numeric: tabular-nums; }
+    #renderInfo .riVal code{ font-size: 11px; }
+    
+    #renderInfo .riEntry{
+      border-top: 1px solid rgba(255,255,255,.10);
+      padding: 8px 8px;
+      margin: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #renderInfo .riEntry:hover{ background: rgba(255,255,255,.04); border-radius: 12px; padding: 10px 8px; margin-left:-4px; margin-right:-4px; }
+    #renderInfo .riEntry:active{ background: rgba(255,255,255,.07); }
+    #renderInfo .riEntry.selected{ outline: 1px solid rgba(255,255,255,.28); border-radius: 12px; padding: 10px 8px; margin-left:-4px; margin-right:-4px; }
+    #renderInfo .riHdr b{ font-size: 12px; }
+    #renderInfo .riHdr span{ font-size: 11px; opacity:.75; }
+    #renderInfo .riGrid{
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 4px 10px;
+      margin-top: 6px;
+      font-size: 16px;
+      line-height: 1.25;
+    }
+
+    #renderInfo .riCmapBar{
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.18);
+      margin-top: 4px;
+    }
+
+  
+    #viewControls{
+      position: fixed;
+      display: none; /* shown on long-press */
+      right: 12px;
+      bottom: 12px;
+      z-index: 9;
+      display: grid;
+      grid-template-columns: 64px 64px 64px;
+      grid-template-rows: 64px 64px 64px 64px;
+      gap: 10px;
+      padding: 14px;              /* dead-zone padding */
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(16,16,16,.78);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      touch-action: manipulation;
+      pointer-events: auto;        /* intercept taps even if you miss the buttons */
+    }
+    #viewControls button{
+      width: 64px; height: 64px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #viewControls button:active{ background: rgba(255,255,255,.10); }
+    #viewControls .vcEmpty{ visibility:hidden; }
+
+  
+    #installHint{
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: min(720px, calc(100vw - 24px));
+      background: rgba(16,16,16,.86);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 14px;
+      padding: 10px 12px;
+      color: #fff;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      z-index: 12;
+      display: none;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+    #installHint .row{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      border: none;
+      padding: 0;
+      grid-template-columns: none;
+    }
+    #installHint b{ font-size: 13px; }
+    #installHint p{ margin: 2px 0 0 0; font-size: 12px; opacity: .85; line-height: 1.25; }
+    #installHint button{
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 16px;
+      white-space: nowrap;
+    }
+
+  
+    /* --- V15b: prevent iOS/Safari text selection/callout on canvas + overlays --- */
+    body, canvas, #viewControls, #renderInfo, #installHint, #backdrop {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Allow normal interaction inside the settings menu */
+    #menu { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+    #menu input, #menu button, #menu select { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+
+  .randFlag{margin-left:8px; transform:scale(1.2); vertical-align:middle;}
+  @media (hover:none){ .randFlag{transform:scale(1.35);} }
+
+    /* --- iOS: hard-disable text selection/callouts inside menu --- */
+    #menu, #menu * {
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      -webkit-touch-callout: none !important;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Make sliders reliably draggable on iOS (avoid scroll stealing horizontal drags) */
+    #menu input[type="range"]{
+      touch-action: pan-x;
+    }
+    #menu.noScroll{
+      overflow: hidden !important;
+    }
+
+
+/* Startup help modal */
+#startupHelp {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  background: rgba(0,0,0,0.55);
+}
+#startupHelp .panel {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: rgba(20,20,20,0.98);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 12px;
+  padding: 14px 14px 10px 14px;
+  color: #eee;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+#startupHelp h3 { margin: 0 0 8px 0; font-size: 18px; }
+#startupHelp p { margin: 8px 0; line-height: 1.35; font-size: 14px; color: rgba(255,255,255,0.9); }
+#startupHelp .btnrow { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
+#startupHelp button {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+#startupHelp button:active { background: rgba(255,255,255,0.22); }
+
+
+@media (max-width: 520px) {
+  /* Phone layout: menu fills the screen exactly (no overflow past edges) */
+  #menu {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    min-width: 0;
+    border-radius: 0;
+    box-sizing: border-box;
+    padding:
+      calc(12px + env(safe-area-inset-top))
+      calc(12px + env(safe-area-inset-right))
+      calc(12px + env(safe-area-inset-bottom))
+      calc(12px + env(safe-area-inset-left));
+  }
+  #menuTop h2 { font-size: 20px; }
+  .subnote { font-size: 12px; }
+}
+
+
+
+#paramOverlay{
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 18;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.92);
+  font-size: 14px;
+  line-height: 1.25;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  -webkit-user-select: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+#paramOverlay .poItem{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+#paramOverlay .poItem.poWide{ flex: 1 1 140px; min-width: 140px; }
+#paramOverlay .poLbl{
+  font-size: 11px;
+  letter-spacing: .08em;
+  opacity: .8;
+  font-weight: 800;
+}
+#paramOverlay .poVal{
+  display:inline-block;
+  min-width: 64px;
+  text-align: left;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#modePill{ position:fixed; top:12px; right:12px; z-index:20; pointer-events:auto; }
+#modeToggle{
+  display:flex;
+  gap:0;
+  border-radius: 999px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.35);
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-touch-callout:none;
+}
+#modeToggle .modeOpt{
+  padding: 10px 12px;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: .08em;
+  opacity: .75;
+}
+#modeToggle .modeOpt.active{
+  background: rgba(255,255,255,0.18);
+  opacity: 1;
+}
+
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="viewControls" style="display:none;">
+  <button id="vcPlus" type="button" aria-label="Zoom in">+</button>
+  <button id="vcUp" type="button" aria-label="Pan up">↑</button>
+  <button id="vcMinus" type="button" aria-label="Zoom out">−</button>
+
+  <button id="vcLeft" type="button" aria-label="Pan left">←</button>
+  <button id="vcReset" type="button" aria-label="Reset view">⟳</button>
+  <button id="vcRight" type="button" aria-label="Pan right">→</button>
+
+  <button id="vcMenu" type="button" aria-label="Open menu">☰</button>
+  <div class="vcEmpty"> </div>
+  <button id="vcHide" type="button" aria-label="Hide controls">✕</button>
+</div>
+
+<div id="paramOverlay" style="display:none;">
+  <div class="poItem"><span class="poLbl">MODE</span><span id="poMode" class="poVal"></span></div>
+  <div class="poItem poWide"><span class="poLbl">F</span><span id="poFormula" class="poVal"></span></div>
+  <div class="poItem"><span class="poLbl">a</span><span id="poA" class="poVal"></span></div>
+  <div class="poItem"><span class="poLbl">b</span><span id="poB" class="poVal"></span></div>
+  <div class="poItem"><span class="poLbl">c</span><span id="poC" class="poVal"></span></div>
+  <div class="poItem"><span class="poLbl">d</span><span id="poD" class="poVal"></span></div>
+</div>
+<div id="modePill" style="display:none;">
+  <div id="modeToggle" role="button" tabindex="0" aria-label="Toggle PAN/MOD/ALL">
+    <span id="modePan" class="modeOpt active">PAN</span>
+    <span id="modeMod" class="modeOpt">MOD</span>
+    <span id="modeAll" class="modeOpt">ALL</span>
+  </div>
+</div>
+<div id="installHint"><div class="row"><div><b>Install for full‑screen</b><p>Share → Add to Home Screen (keep “Open as Web App” on) for the cleanest full‑screen experience.</p></div><div style="margin-left:auto; display:flex; gap:8px;"><button id="btnInstallNever" type="button">Don’t show again</button><button id="btnInstallDismiss" type="button">Dismiss</button></div></div></div>
+<div aria-live="polite" id="renderInfo"></div>
+<div id="backdrop"></div>
+<div id="menu">
+<div id="menuTop">
+<h2>Hopalong (dual randomize)</h2>
+<div id="menuBtns">
+<button id="btnApply">Apply + Draw</button>
+<button id="btnClose">Close</button>
+</div>
+</div>
+
+<div class="row">
+  <input id="randomize" type="checkbox" checked />
+  <label for="randomize">Auto-randomize</label>
+  <output id="randomizeOut">ON</output>
+</div>
+<output id="randModeOut" style="display:none">All params</output>
+
+
+<div class="row" id="modEnableRow" style="border-bottom:1px solid rgba(255,255,255,.08);">
+  <input id="enableMod" type="checkbox" />
+  <label for="enableMod">Enable modulation</label>
+  <div style="opacity:.75; font-size:12px;">Shows PAN/MODULATE button. Zoom always works.</div>
+  <output id="enableModOut">OFF</output>
+</div>
+
+<div class="row" id="modPickRowX" style="display:none;">
+  <div></div>
+  <label for="modX">Mod X (drag)</label>
+  <select id="modX"></select>
+  <output></output>
+</div>
+
+<div class="row" id="modPickRowY" style="display:none;">
+  <div></div>
+  <label for="modY">Mod Y (drag)</label>
+  <select id="modY"></select>
+  <output></output>
+</div>
+
+<div class="row" id="overlayRow" style="display:none;">
+  <input id="showOverlay" type="checkbox" />
+  <label for="showOverlay">Show bottom params</label>
+  <div style="opacity:.75; font-size:12px;">Bottom bar showing MODE, formula, and a/b/c/d.</div>
+  <output id="showOverlayOut">OFF</output>
+</div>
+<div class="row">
+<input checked class="randFlag" id="rand_formula" type="checkbox" title="Randomize this parameter"/>
+<label for="formula">Formula</label>
+<div style="display:flex; flex-direction:column; gap:6px;">
+  <select id="formula"></select>
+  <div id="formulaDesc" style="font-size:12px; opacity:.8"></div>
+</div>
+<output id="formulaOut">Classic (sqrt)</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_alpha" type="checkbox" title="Randomize this parameter"/>
+<label for="alpha">a</label>
+<input id="alpha" type="range" min="0" max="100" step="0.1" value="50"/>
+<output id="alphaOut">1</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_beta" type="checkbox" title="Randomize this parameter"/>
+<label for="beta">b</label>
+<input id="beta" type="range" min="0" max="100" step="0.1" value="50"/>
+<output id="betaOut">19</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_gamma" type="checkbox" title="Randomize this parameter"/>
+<label for="gamma">d</label>
+<input id="gamma" type="range" min="0" max="100" step="0.1" value="50"/>
+<output id="gammaOut">0</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_delta" type="checkbox" title="Randomize this parameter"/>
+<label for="delta">c</label>
+<input id="delta" type="range" min="0" max="100" step="0.1" value="50"/>
+<output id="deltaOut">0</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_orbits" type="checkbox" title="Randomize this parameter"/>
+<label for="orbits">Orbits (N)</label>
+<input id="orbits" type="range" min="1" max="80" step="1" value="25"/>
+<output id="orbitsOut">25</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_iters" type="checkbox" title="Randomize this parameter"/>
+<label for="iters">Iters</label>
+<input id="iters" type="range" min="500" max="50000" step="100" value="8000"/>
+<output id="itersOut">8000</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_burn" type="checkbox" title="Randomize this parameter"/>
+<label for="burn">Burn-in</label>
+<input id="burn" type="range" min="0" max="5000" step="5" value="50"/>
+<output id="burnOut">50</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_rangeR" type="checkbox" title="Randomize this parameter"/>
+<label for="rangeR">Range r</label>
+<input id="rangeR" type="range" min="20" max="1000" step="1" value="300"/>
+<output id="rangeROut">300</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_initR" type="checkbox" title="Randomize this parameter"/>
+<label for="initR">Init range</label>
+<input id="initR" type="range" min="10" max="300" step="1" value="100"/>
+<output id="initROut">100</output>
+</div>
+
+<div class="row">
+<input checked class="randFlag" id="rand_cmap" type="checkbox" title="Randomize this parameter"/>
+<label for="cmap">Color map</label>
+<div style="display:flex; flex-direction:column; gap:6px;">
+  <select id="cmap"></select>
+  <div class="cmPreview" id="cmPreview"></div>
+</div>
+<output id="cmapOut">Turbo</output>
+</div>
+
+<div class="row" id="randBulkRow" style="margin-top:10px; display:flex; flex-direction:column; align-items:flex-start; gap:10px;">
+  <label class="left" style="display:flex; align-items:center; gap:10px;">
+    <input type="radio" name="randBulk" id="randBulkAll" value="all"/>
+    <span>Check all</span>
+  </label>
+  <label class="left" style="display:flex; align-items:center; gap:10px;">
+    <input type="radio" name="randBulk" id="randBulkNone" value="none"/>
+    <span>Uncheck all</span>
+  </label>
+</div>
+<div class="subnote">
+Gestures:
+<br/>• Short tap <b>Right side</b>: <b>Next</b>
+<br/>• Short tap <b>Left side</b>: <b>Previous</b>
+<br/>• Long press (~0.5s): <b>Opens the menu</b>
+<br/>• Pan / zoom: <b>Drag</b> to pan. <b>Pinch</b> to zoom.
+<br/><br/>
+Randomize:
+<br/>• Tick the checkbox next to any parameter you want randomized on each redraw.
+</div>
+</div>
+
+<div id="startupHelp">
+  <div class="panel">
+    <h3>Quick controls</h3>
+    <div id="startupHelpBody"></div>
+    <div class="btnrow">
+      <button id="startupHelpNever" type="button">Don’t show again</button>
+      <button id="startupHelpOk" type="button">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+(() => {
+
+  // --- Global error trap (helps catch black-screen regressions) ---
+  window.addEventListener('error', (ev) => {
+    try {
+      const ri = document.getElementById('renderInfo');
+      if (ri) {
+        ri.style.display = 'block';
+        ri.style.position = 'fixed';
+        ri.style.left = '12px';
+        ri.style.top = '12px';
+        ri.style.zIndex = '9999';
+        ri.style.padding = '10px 12px';
+        ri.style.maxWidth = 'calc(100vw - 24px)';
+        ri.style.border = '1px solid rgba(255,255,255,.25)';
+        ri.style.borderRadius = '12px';
+        ri.style.background = 'rgba(16,16,16,.92)';
+        ri.style.color = '#fff';
+        ri.textContent = 'JS error: ' + (ev.message || ev.error || 'unknown') + (ev.filename ? (' @ ' + ev.filename + ':' + ev.lineno) : '');
+      }
+    } catch (e) {}
+  });
+  window.addEventListener('unhandledrejection', (ev) => {
+    try {
+      const ri = document.getElementById('renderInfo');
+      if (ri) {
+        ri.style.display = 'block';
+        ri.textContent = 'Promise rejection: ' + (ev.reason && (ev.reason.message || ev.reason.toString()) || 'unknown');
+      }
+    } catch (e) {}
+  });
+
+  // ---------- canvas / pixel buffer ----------
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+
+
+  let img, buf;
+
+  // View-only adjustments for the *last* completed render (no parameter changes)
+  let viewZoom = 1.0;
+  let viewPanX = 0.0; // world units
+  let viewPanY = 0.0; // world units
+
+  // Stored points/colors from the last completed render
+  let lastPtsXY = null;         // Float32Array of [x0,y0,x1,y1,...] in world coords
+  let lastPtOrbit = null;       // Uint16Array orbit index per point
+  let lastPtCount = 0;          // number of points
+  let lastOrbitColors = null;   // array of [r,g,b] per orbit
+  let lastBaseR = 0;            // r used for mapping
+
+  // ---------- preview rendering (low-res during modulation) ----------
+  // Adjust this later if you want a sharper/faster preview.
+  const PREVIEW_SCALE = 0.33; // 0.33x preview during drag
+  let pCanvas = null, pCtx = null, pImg = null, pBuf = null;
+
+  function ensurePreviewBuffer(){
+    if (!pCanvas){
+      pCanvas = document.createElement('canvas');
+      pCtx = pCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    const pw = Math.max(1, Math.floor(canvas.width  * PREVIEW_SCALE));
+    const ph = Math.max(1, Math.floor(canvas.height * PREVIEW_SCALE));
+    if (pCanvas.width !== pw || pCanvas.height !== ph || !pImg){
+      pCanvas.width = pw;
+      pCanvas.height = ph;
+      pImg = pCtx.createImageData(pw, ph);
+      pBuf = pImg.data;
+    }
+  }
+
+
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+ctx.imageSmoothingEnabled = false;
+    img = ctx.createImageData(canvas.width, canvas.height);
+    buf = img.data;
+    clearScreen();
+    ensurePreviewBuffer();
+  }
+  window.addEventListener('resize', resize, { passive: true });
+
+  function clearScreen() {
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  resize();
+  attachViewControls();
+
+  function setPixel(x, y, r, g, b) {
+    const idx = (y * canvas.width + x) * 4;
+    buf[idx] = r; buf[idx+1] = g; buf[idx+2] = b; buf[idx+3] = 255;
+  }
+  function resetView() {
+    viewZoom = 1.0;
+    viewPanX = 0.0;
+    viewPanY = 0.0;
+  }
+
+  function redrawLastRender() {
+    if (!lastPtsXY || !lastPtOrbit || !lastOrbitColors || lastPtCount <= 0) return;
+
+    const w = canvas.width, h = canvas.height;
+    const r = lastBaseR;
+
+    const sx = ((w - 1) / (2 * r)) * viewZoom;
+    const sy = ((h - 1) / (2 * r)) * viewZoom;
+    const xoff = r;
+    const yoff = r;
+
+    // clear buffer
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 255;
+    }
+
+    for (let i = 0; i < lastPtCount; i++) {
+      const x = lastPtsXY[i*2]     - viewPanX;
+      const y = lastPtsXY[i*2 + 1] - viewPanY;
+      const px = ((x + xoff) * sx) | 0;
+      const py = ((yoff - y) * sy) | 0;
+
+      if ((px >>> 0) < w && (py >>> 0) < h) {
+        const c = lastOrbitColors[lastPtOrbit[i]];
+        setPixel(px, py, c[0], c[1], c[2]);
+      }
+    }
+
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function attachViewControls() {
+    const plus  = document.getElementById('vcPlus');
+    const minus = document.getElementById('vcMinus');
+    const up    = document.getElementById('vcUp');
+    const down  = document.getElementById('vcDown');
+    const left  = document.getElementById('vcLeft');
+    const right = document.getElementById('vcRight');
+    const reset = document.getElementById('vcReset');
+    const menuBtn = document.getElementById('vcMenu');
+    const hideBtn = document.getElementById('vcHide');
+    const box   = document.getElementById('viewControls');
+    if (box){
+      const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      box.addEventListener('pointerdown', swallow, { passive: false });
+      box.addEventListener('pointerup', swallow, { passive: false });
+      box.addEventListener('click', swallow, { passive: false });
+      box.addEventListener('touchstart', swallow, { passive: false });
+      box.addEventListener('touchend', swallow, { passive: false });
+    }
+
+    const clickish = (el, fn) => {
+      if (!el) return;
+      const handler = (ev) => { ev.preventDefault(); ev.stopPropagation(); if (drawing) return; fn(); };
+      el.addEventListener('click', handler, { passive: false });
+      el.addEventListener('touchstart', handler, { passive: false });
+    };
+
+    clickish(plus, () => { viewZoom *= 1.20; redrawLastRender(); });
+    clickish(minus, () => { viewZoom /= 1.20; redrawLastRender(); });
+
+    const panStep = () => (lastBaseR ? (lastBaseR * 0.12) / viewZoom : 10);
+
+    clickish(left,  () => { viewPanX -= panStep(); redrawLastRender(); });
+    clickish(right, () => { viewPanX += panStep(); redrawLastRender(); });
+    clickish(up,    () => { viewPanY += panStep(); redrawLastRender(); });
+    clickish(down,  () => { viewPanY -= panStep(); redrawLastRender(); });
+
+    clickish(reset, () => { resetView(); redrawLastRender(); });
+    // Menu and hide
+    clickish(menuBtn, () => { showMenu(true); });
+    clickish(hideBtn, () => { showControls(false); });
+
+  }
+
+
+  // ---------- UI / menu ----------
+  const menu = document.getElementById('menu');
+  const backdrop = document.getElementById('backdrop');
+  const btnApply = document.getElementById('btnApply');
+  const btnClose = document.getElementById('btnClose');
+  const overlayRow = document.getElementById('overlayRow');
+  const elShowOverlay = document.getElementById('showOverlay');
+  const outShowOverlay = document.getElementById('showOverlayOut');
+  const paramOverlay = document.getElementById('paramOverlay');
+
+  const poMode = document.getElementById('poMode');
+  const poFormula = document.getElementById('poFormula');
+  const poA = document.getElementById('poA');
+  const poB = document.getElementById('poB');
+  const poC = document.getElementById('poC');
+  const poD = document.getElementById('poD');
+
+
+  // Prevent iOS Safari double-tap-to-zoom on the menu background (but keep controls usable)
+  (() => {
+    let lastEnd = 0;
+    menu.addEventListener('touchend', (e) => {
+      const t = e.target;
+      const tag = (t && t.tagName) ? t.tagName.toUpperCase() : '';
+      // Allow normal interaction with form controls
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'LABEL' || tag === 'TEXTAREA') return;
+      const now = Date.now();
+      if (now - lastEnd <= 300) {
+        e.preventDefault();
+      }
+      lastEnd = now;
+    }, { passive: false });
+  })();
+
+
+  // ---------- install hint (iOS Safari, once) ----------
+  const installHint = document.getElementById('installHint');
+  const btnInstallDismiss = document.getElementById('btnInstallDismiss');
+  const btnInstallNever = document.getElementById('btnInstallNever');
+
+  function isIOSDevice() {
+    const ua = navigator.userAgent || '';
+    const iOS = /iPad|iPhone|iPod/i.test(ua);
+    const iPadOS13Plus = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
+    return iOS || iPadOS13Plus;
+  }
+  function isStandaloneMode() {
+    return (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  }
+  const INSTALL_HINT_KEY = 'hopalong_install_hint_dismissed_v15k';
+  function maybeShowInstallHint() {
+    if (!installHint) return;
+    if (!isIOSDevice()) return;
+    if (isStandaloneMode()) return;
+    if (localStorage.getItem(INSTALL_HINT_KEY) === '1') return;
+
+    installHint.style.display = 'block';
+    // Auto-hide after a short delay unless user interacts
+    const t = setTimeout(() => { installHint.style.display = 'none'; }, 9000);
+
+    const hide = () => { clearTimeout(t); installHint.style.display = 'none'; };
+    if (btnInstallDismiss) btnInstallDismiss.onclick = hide;
+    if (btnInstallNever) btnInstallNever.onclick = () => { localStorage.setItem(INSTALL_HINT_KEY, '1'); hide(); };
+  }
+
+  // ---------- randomise bulk controls ----------
+  const randBulkAll = document.getElementById('randBulkAll');
+  const randBulkNone = document.getElementById('randBulkNone');
+
+  function setAllRandFlags(val) {
+    document.querySelectorAll('#menu .randFlag').forEach(cb => { cb.checked = !!val; });
+  }
+  if (randBulkAll) randBulkAll.addEventListener('change', () => { if (randBulkAll.checked) setAllRandFlags(true); });
+  if (randBulkNone) randBulkNone.addEventListener('change', () => { if (randBulkNone.checked) setAllRandFlags(false); });
+  let bulkApplying = false;
+  function clearRandBulkRadios() {
+    if (randBulkAll) randBulkAll.checked = false;
+    if (randBulkNone) randBulkNone.checked = false;
+  }
+
+  // Wrap bulk actions so we don't immediately clear the radios from the resulting checkbox changes
+  const _setAllRandFlags = setAllRandFlags;
+  setAllRandFlags = (val) => {
+    bulkApplying = true;
+    try { _setAllRandFlags(val); }
+    finally { bulkApplying = false; }
+  };
+
+  // Any manual change to an individual checkbox clears the bulk selection
+  document.querySelectorAll('#menu .randFlag').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (!bulkApplying) clearRandBulkRadios();
+    });
+  });
+
+
+  const elFormula = document.getElementById('formula');
+  const elFormulaDesc = document.getElementById('formulaDesc');
+  const outFormula = document.getElementById('formulaOut');
+
+  const elRandModeOut = document.getElementById('randModeOut');
+  const randModeRadios = Array.from(document.querySelectorAll('input[name="randMode"]'));
+
+  const elRandomize = document.getElementById('randomize');
+  const elAlpha = document.getElementById('alpha');
+  const elBeta = document.getElementById('beta');
+  const elGamma = document.getElementById('gamma');
+  const elDelta = document.getElementById('delta');
+  const elOrbits = document.getElementById('orbits');
+  const elIters = document.getElementById('iters');
+  const elBurn = document.getElementById('burn');
+  const elRangeR = document.getElementById('rangeR');
+  const elInitR = document.getElementById('initR');
+  const elCmap = document.getElementById('cmap');
+  // per-parameter randomize flags (default checked)
+  const rand = {
+    formula: document.getElementById('rand_formula'),
+    cmap: document.getElementById('rand_cmap'),
+    alpha: document.getElementById('rand_alpha'),
+    beta: document.getElementById('rand_beta'),
+    gamma: document.getElementById('rand_gamma'),
+    delta: document.getElementById('rand_delta'),
+    orbits: document.getElementById('rand_orbits'),
+    iters: document.getElementById('rand_iters'),
+    burn: document.getElementById('rand_burn'),
+    rangeR: document.getElementById('rand_rangeR'),
+    initR: document.getElementById('rand_initR')
+  };
+  const cmPreview = document.getElementById('cmPreview');
+
+  const outRandomize = document.getElementById('randomizeOut');
+  const outAlpha = document.getElementById('alphaOut');
+  const outBeta = document.getElementById('betaOut');
+  const outGamma = document.getElementById('gammaOut');
+  const outDelta = document.getElementById('deltaOut');
+  const outOrbits = document.getElementById('orbitsOut');
+  const outIters = document.getElementById('itersOut');
+  const outBurn = document.getElementById('burnOut');
+  const outRangeR = document.getElementById('rangeROut');
+  const outInitR = document.getElementById('initROut');
+  const outCmap = document.getElementById('cmapOut');
+
+  function getRandMode() {
+    const r = randModeRadios.find(x => x.checked);
+    return r ? r.value : "ab";
+  }
+
+  // ---------- colormaps ----------
+  function clamp01(x){ return x < 0 ? 0 : (x > 1 ? 1 : x); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function lerp3(c1,c2,t){ return [lerp(c1[0],c2[0],t), lerp(c1[1],c2[1],t), lerp(c1[2],c2[2],t)]; }
+  function fromStops(stops, t){
+    t = clamp01(t);
+    for (let i=0; i<stops.length-1; i++){
+      const a = stops[i], b = stops[i+1];
+      if (t >= a[0] && t <= b[0]){
+        const u = (t - a[0]) / (b[0] - a[0] || 1);
+        return lerp3(a[1], b[1], u);
+      }
+    }
+    return stops[stops.length-1][1];
+  }
+
+  const ColorMaps = {
+    "Turbo": (t) => fromStops([
+      [0.00,[48,18,59]],[0.10,[50,44,125]],[0.20,[32,96,189]],[0.30,[41,158,179]],
+      [0.40,[93,201,99]],[0.50,[177,222,44]],[0.60,[236,199,24]],[0.70,[250,144,25]],
+      [0.80,[243,85,38]],[0.90,[206,41,57]],[1.00,[122,4,3]]
+    ], t),
+    "Viridis": (t) => fromStops([[0,[68,1,84]],[.25,[59,82,139]],[.5,[33,145,140]],[.75,[94,201,98]],[1,[253,231,37]]], t),
+    "Plasma": (t) => fromStops([[0,[13,8,135]],[.25,[126,3,167]],[.5,[203,71,119]],[.75,[248,149,64]],[1,[240,249,33]]], t),
+    "Inferno": (t) => fromStops([[0,[0,0,4]],[.25,[87,15,109]],[.5,[187,55,84]],[.75,[249,142,8]],[1,[252,255,164]]], t),
+    "Magma": (t) => fromStops([[0,[0,0,4]],[.25,[78,18,123]],[.5,[182,54,121]],[.75,[251,136,97]],[1,[252,253,191]]], t),
+    "Gray": (t) => { const v = Math.round(255*clamp01(t)); return [v,v,v]; },
+    "Rainbow": (t) => {
+      t = clamp01(t);
+      const h = (1 - t) * 240;
+      const c = 1, hp = h/60, x = c*(1-Math.abs((hp%2)-1));
+      let r=0,g=0,b=0;
+      if (hp<1){ r=c; g=x; } else if (hp<2){ r=x; g=c; }
+      else if (hp<3){ g=c; b=x; } else if (hp<4){ g=x; b=c; }
+      else if (hp<5){ r=x; b=c; } else { r=c; b=x; }
+      return [Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+    },
+    "Heat": (t) => fromStops([[0,[0,0,0]],[.33,[180,0,0]],[.66,[255,160,0]],[1,[255,255,255]]], t),
+    "Ocean": (t) => fromStops([[0,[0,0,0]],[.25,[0,20,70]],[.5,[0,90,160]],[.75,[40,180,220]],[1,[220,250,255]]], t)
+  
+    ,
+    "H&E": (t) => fromStops([[0,[20,10,30]],[.20,[60,40,120]],[.45,[190,90,180]],[.70,[245,170,210]],[1,[255,245,250]]], t),
+    "Giemsa": (t) => fromStops([[0,[10,8,30]],[.25,[30,60,140]],[.50,[80,140,170]],[.75,[210,180,120]],[1,[250,245,220]]], t),
+    "Gram": (t) => fromStops([[0,[15,10,20]],[.30,[90,40,140]],[.55,[160,90,210]],[.78,[210,160,80]],[1,[245,245,235]]], t),
+    "PAS": (t) => fromStops([[0,[15,8,8]],[.28,[120,30,70]],[.55,[220,120,160]],[.78,[245,210,120]],[1,[255,250,235]]], t),
+    "Trichrome": (t) => fromStops([[0,[5,20,30]],[.25,[10,70,120]],[.50,[40,140,160]],[.75,[170,190,120]],[1,[245,245,230]]], t),
+    "DAB": (t) => fromStops([[0,[5,5,5]],[.25,[60,40,20]],[.50,[120,80,40]],[.75,[190,150,90]],[1,[250,245,235]]], t),
+    "Fluorescein": (t) => fromStops([[0,[0,0,0]],[.15,[0,30,10]],[.40,[0,120,40]],[.70,[60,220,90]],[1,[230,255,240]]], t),
+    "Toluidine": (t) => fromStops([[0,[5,5,20]],[.25,[30,30,110]],[.50,[80,90,190]],[.75,[150,170,220]],[1,[245,250,255]]], t),
+    "Safranin+FG": (t) => fromStops([[0,[10,5,5]],[.25,[160,40,60]],[.50,[220,120,90]],[.72,[80,160,90]],[1,[235,250,235]]], t),
+    "Sepia": (t) => fromStops([[0,[0,0,0]],[.25,[70,50,30]],[.50,[130,100,60]],[.75,[200,175,130]],[1,[250,245,235]]], t)
+};
+
+  // ---------- render info panel ----------
+const renderInfo = document.getElementById('renderInfo');
+renderInfo.addEventListener('pointerdown', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('pointerup', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('click', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('touchstart', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+renderInfo.addEventListener('touchend', (ev)=>{ ev.stopPropagation(); }, { passive: true });
+
+
+const HISTORY_KEY = "hopalong_render_history_v1";
+const MAX_HISTORY = 50;
+// Navigation cursor into renderHistory (0 = newest). Used for left/right tap browsing.
+let historyPos = 0;
+// When true, a draw is re-rendering an existing history entry and must NOT create a new history record.
+let navReRender = false;
+let navTargetId = null;
+// One-shot: skip randomization for the next draw.
+let suppressRandomizeOnce = false;
+
+
+let renderCount = 0;
+let lastRender = null;
+let renderHistory = [];
+  let currentSeed = null; // per-render RNG seed stored in history
+
+
+function loadHistory(){
+  try{
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) renderHistory = arr.slice(0, MAX_HISTORY);
+    if (renderHistory.length) {
+      lastRender = renderHistory[0];
+      // keep renderCount monotonic if possible
+      const mx = renderHistory.reduce((acc,p)=>Math.max(acc, p._id||0), 0);
+      renderCount = Math.max(renderCount, mx);
+    }
+  }catch(_){}
+}
+
+function saveHistory(){
+  try{
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(renderHistory.slice(0, MAX_HISTORY)));
+  }catch(_){}
+}
+
+function nowStamp(){
+  const d = new Date();
+  return d.toLocaleString(undefined, { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function fmtNum(x){
+  if (!Number.isFinite(x)) return "—";
+  const v = +x;
+  if (Number.isInteger(v)) return String(v);
+  return String(parseFloat(v.toFixed(3)));
+}
+
+function cmapGradientCSS(name){
+  const cmap = ColorMaps[name] || ColorMaps['Turbo'];
+  const stops = [];
+  for (let i=0;i<=10;i++){
+    const t=i/10;
+    const c=cmap(t);
+    stops.push(`rgb(${c[0]|0},${c[1]|0},${c[2]|0}) ${Math.round(t*100)}%`);
+  }
+  return `linear-gradient(90deg, ${stops.join(',')})`;
+}
+
+function applyParamsToUI(p){
+  // Formula
+  if (p.formulaId) {
+    elFormula.value = p.formulaId;
+    // Ensure slider % meanings match the formula-specific range when loading history/presets.
+    activeFormulaRange = getFormulaRange(elFormula.value);
+  }
+
+  // Randomize
+  if (typeof p.autoRandomizeRaw === "boolean") elRandomize.checked = p.autoRandomizeRaw;
+
+  // Rand mode
+  if (p.randModeRaw) setRandMode(p.randModeRaw);
+
+  // Params (prefer new % fields; fall back to legacy fields)
+  if (p.aPct != null) elAlpha.value = String(p.aPct);
+  else if (p.alpha != null) elAlpha.value = String(p.alpha);
+
+  if (p.bPct != null) elBeta.value = String(p.bPct);
+  else if (p.beta != null) elBeta.value = String(p.beta);
+
+  // gamma slider is "d"
+  if (p.dPct != null) elGamma.value = String(p.dPct);
+  else if (p.gamma != null) elGamma.value = String(p.gamma);
+
+  // delta slider is "c"
+  if (p.cPct != null) elDelta.value = String(p.cPct);
+  else if (p.delta != null) {
+    // Legacy: some versions stored delta as slider-% (0..100), others stored it as the actual c-value.
+    if (p.cVal != null && Number.isFinite(+p.cVal)) {
+      setDelta(+p.cVal);
+    } else {
+      const v = parseFloat(p.delta);
+      if (Number.isFinite(v)) {
+        if (v >= 0 && v <= 100) elDelta.value = String(v);
+        else setDelta(v);
+      }
+    }
+  }
+
+  // Viewport
+  if (p.viewZoom != null) viewZoom = +p.viewZoom;
+  if (p.viewPanX != null) viewPanX = +p.viewPanX;
+  if (p.viewPanY != null) viewPanY = +p.viewPanY;
+
+  // Counts/ranges
+  if (p.N != null)     elOrbits.value = String(p.N);
+  if (p.iters != null) elIters.value  = String(p.iters);
+  if (p.burn != null)  elBurn.value   = String(p.burn);
+  if (p.rangeR != null) elRangeR.value = String(p.rangeR);
+  if (p.initR  != null) elInitR.value  = String(p.initR);
+
+  // Colormap
+  if (p.cmap) elCmap.value = p.cmap;
+
+  syncUI();
+}
+
+function renderHistoryUI(selectedId=null){
+  renderInfo.innerHTML = "";
+
+  if (!renderHistory.length){
+    renderInfo.innerHTML = '<div style="opacity:.75; font-size:12px;">No renders yet. Tap canvas to draw. Long-press to open menu.</div>';
+    return;
+  }
+
+  for (const p of renderHistory){
+    const e = document.createElement('div');
+    e.className = 'riEntry' + ((selectedId && p._id === selectedId) ? ' selected' : '');
+    e.dataset.rid = String(p._id || 0);
+
+    const status = p.completed ? 'complete' : 'aborted';
+
+    e.innerHTML = `
+      <div class="riHdr">
+        <b>Render #${p._id || ""} — ${status}</b>
+        <span>${p.when || ""}</span>
+      </div>
+      <div class="riGrid">
+        <div class="riKey">Formula</div>
+        <div class="riVal"><b>${p.formulaName || ""}</b> <span style="opacity:.75">(${p.formulaId || ""})</span><br><code>${p.formulaDesc || ""}</code></div>
+
+        <div class="riKey">Parameters</div>
+        <div class="riVal">a=${fmtNum(+p.aVal)}, b=${fmtNum(+p.bVal)}, c=${fmtNum(+p.cVal)}, d=${fmtNum(+p.dVal)}</div>
+
+        <div class="riKey">Orbits / iters</div>
+        <div class="riVal">N=${String(p.N)}, iters=${String(p.iters)}, burn=${String(p.burn)}</div>
+
+        <div class="riKey">Ranges</div>
+        <div class="riVal">range r=${String(p.rangeR)}, init range=${String(p.initR)}</div>
+
+        <div class="riKey">Color map</div>
+        <div class="riVal">${p.cmap || ""}<div class="riCmapBar" style="background:${p.cmapCSS || ""}"></div></div>
+
+        <div class="riKey">Randomize</div>
+        <div class="riVal">auto=${p.autoRandomizeRaw ? 'ON' : 'OFF'}, mode=${(p.randModeRaw==='ab') ? 'α/β only' : 'All params'}</div>
+
+        <div class="riKey"></div>
+        <div class="riVal" style="opacity:.75">Tap this entry to load + render again.</div>
+      </div>
+    `;
+
+    const loadThis = (ev) => {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      // Jump to this historical render and re-render it without creating a new history entry
+      lastRender = p;
+      applyParamsToUI(p);
+      // set navigation cursor to this entry (0=newest)
+      historyPos = renderHistory.findIndex(x => x._id === p._id);
+      if (historyPos < 0) historyPos = 0;
+      navReRender = true;
+      navTargetId = p._id;
+      suppressRandomizeOnce = true;
+      showMenu(false);
+      requestDraw();
+      renderHistoryUI(p._id);
+    };
+    e.addEventListener('click', loadThis, { passive: false });
+    e.addEventListener('pointerup', loadThis, { passive: false });
+    e.addEventListener('touchend', loadThis, { passive: false });
+
+    renderInfo.appendChild(e);
+  }
+}
+
+function addRenderEntry(p){
+  renderCount++;
+  p._id = renderCount;
+
+  lastRender = p;
+  renderHistory.unshift(p);
+  if (renderHistory.length > MAX_HISTORY) renderHistory.length = MAX_HISTORY;
+
+  // whenever we create a new render, reset navigation cursor to newest
+  historyPos = 0;
+  navReRender = false;
+  navTargetId = null;
+
+  saveHistory();
+  renderHistoryUI(p._id);
+}
+
+
+
+function _loadHistoryAtIndex(idx){
+  if (!renderHistory.length) return false;
+  idx = Math.max(0, Math.min(renderHistory.length-1, idx));
+  historyPos = idx;
+  const p = renderHistory[historyPos];
+  if (!p) return false;
+  lastRender = p;
+  applyParamsToUI(p);
+  navReRender = true;
+  navTargetId = p._id;
+  suppressRandomizeOnce = true;
+  requestDraw();
+  renderHistoryUI(p._id);
+  return true;
+}
+
+function historyBack(){
+  if (renderHistory.length && historyPos < renderHistory.length-1){
+    return _loadHistoryAtIndex(historyPos + 1);
+  }
+  return false;
+}
+
+function historyForwardOrNew(){
+  if (renderHistory.length && historyPos > 0){
+    return _loadHistoryAtIndex(historyPos - 1);
+  }
+  // At newest (or no history): make a new render
+  historyPos = 0;
+  navReRender = false;
+  navTargetId = null;
+  suppressRandomizeOnce = false;
+  requestDraw();
+  return true;
+}
+
+loadHistory();
+renderHistoryUI(lastRender ? lastRender._id : null);
+
+
+  function initColorMapSelect(){
+    for (const n of Object.keys(ColorMaps)){
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      elCmap.appendChild(opt);
+    }
+    elCmap.value = "Turbo";
+  }
+
+  function updateCmapPreview(){
+    const name = elCmap.value;
+    outCmap.textContent = name;
+    const stops = [];
+    for (let i=0;i<=10;i++){
+      const t = i/10;
+      const [r,g,b] = ColorMaps[name](t);
+      stops.push(`rgb(${r|0},${g|0},${b|0}) ${Math.round(t*100)}%`);
+    }
+    cmPreview.style.background = `linear-gradient(90deg, ${stops.join(',')})`;
+  }
+
+  initColorMapSelect();
+  updateCmapPreview();
+
+  // ---------- Variants ----------
+  const Variants = [
+    { id:"classic_sqrt", name:"Classic (sqrt)", desc:"Wolfram/Martin: x' = y − sgn(x)·sqrt(|βx − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)), a - x ]; } },
+
+    { id:"sqrt_plus_gamma_y", name:"Classic + γy", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γy, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*y, a - x ]; } },
+
+    { id:"sqrt_plus_gamma_x", name:"Classic + γx", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γx, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*x, a - x ]; } },
+
+    { id:"mix_inside", name:"sqrt(|β(x+γy)−δ|)", desc:"Mix x,y inside sqrt: x' = y − sgn(x)·sqrt(|β(x+γy) − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*(x+g*y)-d)), a - x ]; } },
+
+    { id:"trig_kick_x", name:"Trig kick (sin x)", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·sin(x), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*Math.sin(x), a - x ]; } },
+
+    // --- Enabled (were previously disabled) ---
+
+    { id:"damped", name:"Damped (|d|)", desc:"x' = (y − sgn(x)·sqrt(|b x − c|))·(1−|d|), y' = a − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const base=y - s*Math.sqrt(Math.abs(b*x-d)); const damp=1-Math.min(0.95,Math.abs(g)); return [ base*damp, a - x ]; } },
+
+    { id:"y_feedback", name:"Y feedback (a−x+d·y)", desc:"Keep classic x', add feedback on y: y' = a − x + d·y",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const xn=y - s*Math.sqrt(Math.abs(b*x-d)); const yn=a - x + g*y; return [xn, yn]; } },
+
+    { id:"trig_kick_y", name:"Trig kick (sin y)", desc:"x' = y − sgn(x)·sqrt(|b x − c|) + d·sin(y), y' = a − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*Math.sin(y), a - x ]; } },
+
+    { id:"classic_plus_yy", name:"Classic + d·y²", desc:"x' = y − sgn(x)·sqrt(|b x − c|) + d·y², y' = a − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*(y*y), a - x ]; } },
+
+{ id:"cos_xy_kick", name:"Trig kick (cos(x+y))", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·cos(x+y), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*Math.cos(x+y), a - x ]; } },
+
+    { id:"inside_sin_y", name:"Inside sqrt: x+γ·sin(y)", desc:"x' = y − sgn(x)·sqrt(|β(x+γ·sin(y)) − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const t=x + g*Math.sin(y); return [ y - s*Math.sqrt(Math.abs(b*t-d)), a - x ]; } },
+
+    { id:"inside_cos_x", name:"Inside sqrt: x+γ·cos(x)", desc:"x' = y − sgn(x)·sqrt(|β(x+γ·cos(x)) − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const t=x + g*Math.cos(x); return [ y - s*Math.sqrt(Math.abs(b*t-d)), a - x ]; } },
+
+    { id:"softsign_kick", name:"Softsign kick", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·(x/(1+|x|)), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const k = x/(1+Math.abs(x)); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*k, a - x ]; } },
+
+    { id:"tanh_kick", name:"Tanh kick", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·tanh(x), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const k = Math.tanh(x); return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*k, a - x ]; } },
+
+    { id:"sign_xy", name:"Sign of (x·y)", desc:"Use sign(x·y): x' = y − sgn(xy)·sqrt(|βx − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const p=x*y; const s=p>0?1:(p<0?-1:0); return [ y - s*Math.sqrt(Math.abs(b*x-d)), a - x ]; } },
+
+    { id:"double_root", name:"Double-root kick", desc:"x' = y − sgn(x)·(sqrt(|βx−δ|)+γ·sqrt(|βy−δ|)), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const r1=Math.sqrt(Math.abs(b*x-d)); const r2=Math.sqrt(Math.abs(b*y-d)); return [ y - s*(r1 + g*r2), a - x ]; } },
+
+    { id:"xy_coupling", name:"XY coupling", desc:"x' = y − sgn(x)·sqrt(|βx − δ|) + γ·(x·y/50), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const k=(x*y)/50; return [ y - s*Math.sqrt(Math.abs(b*x-d)) + g*k, a - x ]; } }
+  ,
+
+    // -------- additional variants (public domain / fractal literature) --------
+    { id:"positive_hopalong", name:"Positive Hopalong (+sqrt)", desc:"x' = y + sgn(x)·sqrt(|βx − δ|), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); return [ y + s*Math.sqrt(Math.abs(b*x-d)), a - x ]; } },
+
+    { id:"sinusoidal_hopalong", name:"Sinusoidal Hopalong (sin)", desc:"x' = y + sin(βx − δ), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ return [ y + Math.sin(b*x - d), a - x ]; } },
+
+    { id:"threeply", name:"Threeply (Peters)", desc:"x' = y − sgn(x)·|sin(x)cos(β) + γ − x·sin(α+β+γ)|, y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const t = Math.sin(x)*Math.cos(b) + g - x*Math.sin(a+b+g); return [ y - s*Math.abs(t), a - x ]; } },
+
+    { id:"quadrup2", name:"Quadrup-2 (Peters)", desc:"x' = y − sgn(x)·sin(ln|βx−δ|)·atan((ln|δx−β|)^2), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const ln1=Math.log(Math.abs(b*x-d)+1e-12); const ln2=Math.log(Math.abs(d*x-b)+1e-12); const k=Math.sin(ln1)*Math.atan((ln2*ln2)); return [ y - s*k, a - x ]; } },
+
+    { id:"chip", name:"Chip (Peters)", desc:"x' = y − sgn(x)·cos((ln|βx−δ|)^2)·atan((ln|βx−δ|)^2), y' = α − x",
+      step:(x,y,a,b,g,d)=>{ const s=x>0?1:(x<0?-1:0); const ln=Math.log(Math.abs(b*x-d)+1e-12); const t=ln*ln; const k=Math.cos(t)*Math.atan(t); return [ y - s*k, a - x ]; } },
+
+    { id:"pickover_clifford", disabled:false, name:"Pickover/Clifford (sin)", desc:"x' = sin(βy) + γ·sin(βx), y' = sin(αx) + δ·sin(αy) (scaled)",
+      step:(x,y,a,b,g,d)=>{ const S=20; return [ S*(Math.sin(b*y) + g*Math.sin(b*x)), S*(Math.sin(a*x) + d*Math.sin(a*y)) ]; } }
+];
+
+  
+  function initFormulaSelect(){
+    for (const v of Variants){
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.name;
+      elFormula.appendChild(opt);
+    }
+    elFormula.value = "classic_sqrt";
+  }
+
+  function getVariant() {
+    const id = elFormula.value;
+    return Variants.find(v => v.id === id) || Variants[0];
+  }
+
+  function updateFormulaDesc(){
+    const v = getVariant();
+    outFormula.textContent = v.name;
+    elFormulaDesc.textContent = v.desc;
+  }
+
+  initFormulaSelect();
+  updateFormulaDesc();
+    updateParamOverlay();
+
+  
+  // ---------- sync UI ----------
+  function syncUI() {
+    outRandomize.textContent = elRandomize.checked ? "ON" : "OFF";
+    outAlpha.textContent = fmtNum(getA());
+    outBeta.textContent = fmtNum(getB());
+    outGamma.textContent = fmtNum(getD());
+    outDelta.textContent = fmtNum(getC());
+    outOrbits.textContent = String(parseInt(elOrbits.value, 10));
+    outIters.textContent = String(parseInt(elIters.value, 10));
+    outBurn.textContent = String(parseInt(elBurn.value, 10));
+    outRangeR.textContent = String(parseInt(elRangeR.value, 10));
+    outInitR.textContent = String(parseInt(elInitR.value, 10));
+    elRandModeOut.textContent = (getRandMode() === "ab") ? "α/β only" : "All params";
+    updateCmapPreview();
+    updateFormulaDesc();
+    updateParamOverlay();
+  }
+
+  function fmtOverlay(v){
+    if (Number.isInteger(v)) return String(v);
+    return (Math.round(v * 1000) / 1000).toString();
+  }
+
+  function updateParamOverlay(){
+    if (!paramOverlay || !elShowOverlay) return;
+    const show = !!elShowOverlay.checked && !inMenu;
+    paramOverlay.style.display = show ? 'flex' : 'none';
+    if (!show) return;
+
+    const variant = getVariant();
+    if (poMode) poMode.textContent = interactionSubMode.toUpperCase();
+    if (poFormula) poFormula.textContent = variant ? variant.name : '';
+    if (poA) poA.textContent = fmtOverlay(getA());
+    if (poB) poB.textContent = fmtOverlay(getB());
+    if (poC) poC.textContent = fmtOverlay(getC());
+    if (poD) poD.textContent = fmtOverlay(getD());
+  }
+
+  [
+    elFormula, ...randModeRadios, elRandomize, elAlpha, elBeta, elGamma,
+    elOrbits, elIters, elBurn, elRangeR, elInitR, elCmap, elDelta
+  ].forEach(el => el.addEventListener('input', syncUI));
+
+  elCmap.addEventListener('change', syncUI);
+  elFormula.addEventListener('change', () => { remapSlidersToNewRange(getFormulaRange(elFormula.value)); syncUI(); });
+
+
+  // ---------- modulation setup ----------
+  const elEnableMod = document.getElementById('enableMod');
+  const outEnableMod = document.getElementById('enableModOut');
+  const modPickRowX = document.getElementById('modPickRowX');
+  const modPickRowY = document.getElementById('modPickRowY');
+  const elModX = document.getElementById('modX');
+  const elModY = document.getElementById('modY');
+  const modePill = document.getElementById('modePill');
+  const modeToggle = document.getElementById('modeToggle');
+  const modePan = document.getElementById('modePan');
+  const modeMod = document.getElementById('modeMod');
+  const modeAll = document.getElementById('modeAll');
+
+  let modulationEnabled = false;
+  let interactionSubMode = 'pan'; // 'pan' | 'modulate'
+
+  // Parameters eligible for modulation (exclude formula/cmap)
+  const ModParams = [
+    { id:'alpha',  name:'a',   el: elAlpha,  min: -100, max: 100,  isInt:false },
+    { id:'beta',   name:'b',    el: elBeta,   min: -100, max: 100,  isInt:false },
+    { id:'gamma',  name:'d',   el: elGamma,  min: -5,   max: 5,    isInt:false },
+    { id:'orbits', name:'Orbits (N)',  el: elOrbits, min: 1,    max: 80,   isInt:true  },
+    { id:'iters',  name:'Iters',       el: elIters,  min: 500,  max: 50000,isInt:true  },
+    { id:'burn',   name:'Burn-in',     el: elBurn,   min: 0,    max: 5000, isInt:true  },
+    { id:'rangeR', name:'Range r',     el: elRangeR, min: 20,   max: 1000, isInt:true  },
+    { id:'initR',  name:'Init range',  el: elInitR,  min: 10,   max: 300,  isInt:true  },
+  ];
+
+
+  // ---------- Per-formula parameter ranges (a,b,c,d) ----------
+  // Ranges are widened in-code by ±10% (clamped) so exploration has breathing room.
+  const FORMULA_RANGES_RAW = {"classic_sqrt":{"a":[-80.0,75.02],"b":[-29.31,30.0],"c":[-20.44,6.11],"d":[0.0,0.0]},"positive_hopalong":{"a":[-76.57,73.43],"b":[-30.0,28.86],"c":[-29.32,30.0],"d":[0.0,0.0]},"sinusoidal_hopalong":{"a":[-26.13,56.28],"b":[-29.48,27.34],"c":[-29.31,30.0],"d":[0.0,0.0]},"sqrt_plus_gamma_y":{"a":[-80.0,77.59],"b":[-21.75,30.0],"c":[-28.94,26.57],"d":[-2.14,2.89]},"sqrt_plus_gamma_x":{"a":[-78.55,77.52],"b":[-30.0,24.37],"c":[-29.13,30.0],"d":[-1.8,2.73]},"mix_inside":{"a":[-80.0,80.0],"b":[-28.02,30.0],"c":[-25.91,30.0],"d":[-3.0,2.92]},"trig_kick_x":{"a":[-75.2,80.0],"b":[-28.73,30.0],"c":[-30.0,27.43],"d":[-0.85,2.95]},"trig_kick_y":{"a":[-79.84,78.7],"b":[-30.0,28.62],"c":[-30.0,30.0],"d":[-2.4,2.75]},"cos_xy_kick":{"a":[-80.0,78.57],"b":[-30.0,30.0],"c":[-30.0,30.0],"d":[-1.18,2.79]},"inside_sin_y":{"a":[-80.0,78.64],"b":[-28.68,30.0],"c":[-29.85,30.0],"d":[-2.84,3.0]},"inside_cos_x":{"a":[-75.39,78.33],"b":[-27.62,30.0],"c":[-30.0,29.85],"d":[-2.34,3.0]},"softsign_kick":{"a":[-76.43,80.0],"b":[-30.0,29.48],"c":[-22.17,30.0],"d":[-3.0,2.88]},"tanh_kick":{"a":[-79.66,76.93],"b":[-30.0,30.0],"c":[-16.76,30.0],"d":[-2.8,2.98]},"sign_xy":{"a":[-28.57,75.71],"b":[-26.8,30.0],"c":[-30.0,30.0],"d":[0.0,0.0]},"double_root":{"a":[-60.0,57.77],"b":[-10.41,12.0],"c":[-30.0,25.26],"d":[-1.15,2.5]},"xy_coupling":{"a":[-80.0,78.78],"b":[-28.77,30.0],"c":[-27.33,30.0],"d":[-0.46,2.25]},"damped":{"a":[-56.36,60.0],"b":[-20.0,19.92],"c":[-30.0,30.0],"d":[-0.2,0.84]},"y_feedback":{"a":[-60.0,57.06],"b":[-19.92,20.0],"c":[-30.0,30.0],"d":[-1.0,0.64]},"threeply":{"a":[-11.16,11.73],"b":[-12.0,12.0],"c":[-30.0,30.0],"d":[-5.24,10.94]},"quadrup2":{"a":[-80.0,75.98],"b":[-10.0,10.0],"c":[-28.89,30.0],"d":[0.0,0.0]},"chip":{"a":[-80.0,80.0],"b":[-10.0,9.88],"c":[-30.0,29.98],"d":[0.0,0.0]},"pickover_clifford":{"a":[-2.0,2.0],"b":[-2.0,2.0],"c":[-2.0,2.0],"d":[-2.0,2.0]},"classic_plus_yy":{"a":[-57.16,60.0],"b":[-20.0,20.0],"c":[-30.0,30.0],"d":[-0.03,0.09]}};
+
+  function clamp(v, lo, hi){ return v<lo?lo:(v>hi?hi:v); }
+  function widenRange(lo, hi, frac){
+    const span = hi - lo;
+    const w = span * frac;
+    return [lo - w, hi + w];
+  }
+  function getFormulaRange(variantId){
+    const raw = FORMULA_RANGES_RAW[variantId];
+    if(!raw){
+      return {a:[-100,100], b:[-100,100], c:[-100,100], d:[-5,5]};
+    }
+    const frac = 0.10;
+    const a = widenRange(raw.a[0], raw.a[1], frac);
+    const b = widenRange(raw.b[0], raw.b[1], frac);
+    const c = widenRange(raw.c[0], raw.c[1], frac);
+    const d = widenRange(raw.d[0], raw.d[1], frac);
+    return {
+      a:[clamp(a[0],-100,100), clamp(a[1],-100,100)],
+      b:[clamp(b[0],-100,100), clamp(b[1],-100,100)],
+      c:[clamp(c[0],-100,100), clamp(c[1],-100,100)],
+      d:[clamp(d[0], -5,  5), clamp(d[1], -5,  5)]
+    };
+  }
+  let activeFormulaRange = getFormulaRange(elFormula.value);
+
+  function pctToVal(pct, lo, hi){
+    return lo + (pct/100) * (hi-lo);
+  }
+  function valToPct(val, lo, hi){
+    if(hi === lo) return 50;
+    return 100 * (val - lo) / (hi - lo);
+  }
+  function getA(){ return pctToVal(+elAlpha.value, activeFormulaRange.a[0], activeFormulaRange.a[1]); }
+  function getB(){ return pctToVal(+elBeta.value,  activeFormulaRange.b[0], activeFormulaRange.b[1]); }
+  function getD(){ return pctToVal(+elGamma.value, activeFormulaRange.d[0], activeFormulaRange.d[1]); } // perturbation
+  function getC(){ return pctToVal(+elDelta.value, activeFormulaRange.c[0], activeFormulaRange.c[1]); }  // sqrt offset
+
+  // Back-compat names used elsewhere in code
+  function getDelta(){ return getC(); }
+  function setDelta(v){
+    const pct = clamp(valToPct(v, activeFormulaRange.c[0], activeFormulaRange.c[1]), 0, 100);
+    elDelta.value = String(pct);
+  }
+
+  function remapSlidersToNewRange(newRange){
+    // keep current actual values (clamped) when range changes
+    const a = clamp(getA(), newRange.a[0], newRange.a[1]);
+    const b = clamp(getB(), newRange.b[0], newRange.b[1]);
+    const c = clamp(getC(), newRange.c[0], newRange.c[1]);
+    const d = clamp(getD(), newRange.d[0], newRange.d[1]);
+    activeFormulaRange = newRange;
+    elAlpha.value = String(clamp(valToPct(a, newRange.a[0], newRange.a[1]), 0, 100));
+    elBeta.value  = String(clamp(valToPct(b, newRange.b[0], newRange.b[1]), 0, 100));
+    elDelta.value = String(clamp(valToPct(c, newRange.c[0], newRange.c[1]), 0, 100));
+    elGamma.value = String(clamp(valToPct(d, newRange.d[0], newRange.d[1]), 0, 100));
+  }
+
+
+  function fillModSelect(sel){
+    sel.innerHTML = '';
+    for (const p of ModParams){
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    }
+    const optNone = document.createElement('option');
+    optNone.value = '';
+    optNone.textContent = 'None';
+    sel.appendChild(optNone);
+  }
+  fillModSelect(elModX);
+  fillModSelect(elModY);
+  elModX.value = 'beta';
+  elModY.value = 'alpha';
+
+  function setModePill(){
+    if (inMenu){
+      modePill.style.display = 'none';
+      return;
+    }
+    modePill.style.display = 'flex';
+    const isPan = (interactionSubMode === 'pan');
+    const isMod = (interactionSubMode === 'modulate');
+    const isAll = (interactionSubMode === 'all');
+    modePan.classList.toggle('active', isPan);
+    modeMod.classList.toggle('active', isMod);
+    modeAll.classList.toggle('active', isAll);
+  }
+
+  elEnableMod.addEventListener('change', ()=>{
+    modulationEnabled = !!elEnableMod.checked;
+    outEnableMod.textContent = modulationEnabled ? 'ON' : 'OFF';
+    modPickRowX.style.display = modulationEnabled ? '' : 'none';
+    modPickRowY.style.display = modulationEnabled ? '' : 'none';
+    if (overlayRow) overlayRow.style.display = modulationEnabled ? '' : 'none';
+    interactionSubMode = 'pan';
+    setModePill();
+  });
+
+  const toggleMode = (e)=>{
+    if (e){ e.preventDefault(); e.stopPropagation(); }
+    interactionSubMode = (interactionSubMode === 'pan') ? 'modulate' : (interactionSubMode === 'modulate') ? 'all' : 'pan';
+    // If user selects MOD or ALL, ensure modulation is enabled.
+    if (interactionSubMode !== 'pan' && !elEnableMod.checked){
+      elEnableMod.checked = true;
+      elEnableMod.dispatchEvent(new Event('change'));
+    }
+    setModePill();
+    updateParamOverlay();
+  };
+  modeToggle.addEventListener('click', toggleMode, { passive:false });
+  modeToggle.addEventListener('touchstart', toggleMode, { passive:false });
+  modeToggle.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' '){ toggleMode(e); } });
+
+  // ensure initial
+  outEnableMod.textContent = 'OFF';
+  modPickRowX.style.display = 'none';
+  modPickRowY.style.display = 'none';
+  if (overlayRow) overlayRow.style.display = 'none';
+  setModePill();
+
+  // ---- params overlay toggle (debug) ----
+  if (elShowOverlay) {
+    elShowOverlay.checked = false;
+    if (outShowOverlay) outShowOverlay.textContent = 'OFF';
+    elShowOverlay.addEventListener('change', () => {
+      if (outShowOverlay) outShowOverlay.textContent = elShowOverlay.checked ? 'ON' : 'OFF';
+      updateParamOverlay();
+    }, { passive: true });
+  }
+
+  function getModParam(id){ return ModParams.find(p=>p.id===id) || null; }
+
+  function swapIfDuplicate(changed){
+    const x = elModX.value;
+    const y = elModY.value;
+    if (!x || !y) return;
+    if (x === y){
+      if (changed === 'x'){
+        elModY.value = prevY;
+      } else {
+        elModX.value = prevX;
+      }
+    }
+  }
+  let prevX = elModX.value;
+  let prevY = elModY.value;
+  elModX.addEventListener('focus', ()=>{ prevX = elModX.value; });
+  elModY.addEventListener('focus', ()=>{ prevY = elModY.value; });
+  elModX.addEventListener('change', ()=>{
+    const x = elModX.value;
+    const y = elModY.value;
+    if (x && y && x === y){
+      // swap
+      elModY.value = prevX;
+    }
+    prevX = elModX.value;
+    prevY = elModY.value;
+  });
+  elModY.addEventListener('change', ()=>{
+    const x = elModX.value;
+    const y = elModY.value;
+    if (x && y && x === y){
+      elModX.value = prevY;
+    }
+    prevX = elModX.value;
+    prevY = elModY.value;
+  });
+
+  // Throttled preview rendering while modulating
+  let isModulating = false;
+  let modStartX = 0, modStartY = 0;
+  let baseXVal = 0, baseYVal = 0;
+  let lastMoveX = 0, lastMoveY = 0;
+  let lastPreviewT = 0;
+  const PREVIEW_MIN_MS = 80;
+
+  // Parameter smoothing for modulation (reduces jitter / stutter during preview)
+  const MOD_SMOOTH_K = 0.25; // higher = snappier, lower = smoother
+  const SOFT_TAKEOVER_PX = 14; // px movement before absolute mapping engages (prevents jump on touch)
+  let modAbsEngaged = false;
+  let modOffsetX = 0, modOffsetY = 0;
+  let modTargetXVal = null, modTargetYVal = null;
+  let modSmoothXVal = null, modSmoothYVal = null;
+
+
+  let preserveViewNext = false;
+  let previewRenderNext = false;
+  let commitHistoryNext = true;
+  let suppressRandomizeAlways = false;
+
+  function schedulePreviewDraw(){
+    const now = performance.now();
+    if (now - lastPreviewT < PREVIEW_MIN_MS) return;
+    lastPreviewT = now;
+
+    // Apply smoothing step toward target values (if modulating)
+    if (isModulating && modTargetXVal != null && modTargetYVal != null){
+      const pxDef = getModParam(elModX.value);
+      const pyDef = getModParam(elModY.value);
+
+      if (modSmoothXVal == null) modSmoothXVal = +pxDef.el.value;
+      if (modSmoothYVal == null) modSmoothYVal = +pyDef.el.value;
+
+      modSmoothXVal = modSmoothXVal + MOD_SMOOTH_K * (modTargetXVal - modSmoothXVal);
+      modSmoothYVal = modSmoothYVal + MOD_SMOOTH_K * (modTargetYVal - modSmoothYVal);
+
+      let vx = modSmoothXVal;
+      let vy = modSmoothYVal;
+
+      // clamp + integer rounding
+      const clamp = (v, lo, hi)=>Math.max(lo, Math.min(hi, v));
+      vx = clamp(vx, pxDef.min, pxDef.max);
+      vy = clamp(vy, pyDef.min, pyDef.max);
+      if (pxDef.isInt) vx = Math.round(vx);
+      if (pyDef.isInt) vy = Math.round(vy);
+
+      pxDef.el.value = String(vx);
+      pyDef.el.value = String(vy);
+      syncUI();
+    }
+
+    if (drawing) { abortDraw = true; } // interrupt current draw
+    preserveViewNext = true;
+    previewRenderNext = true;
+    commitHistoryNext = false;
+    suppressRandomizeAlways = true;
+requestDraw(true);
+  }
+
+  function doFinalModulateDraw(){
+    // Snap to target values and force a full-res render on release.
+    if (isModulating && modTargetXVal != null && modTargetYVal != null){
+      const pxDef = getModParam(elModX.value);
+      const pyDef = getModParam(elModY.value);
+      let vx = modTargetXVal;
+      let vy = modTargetYVal;
+      const clamp = (v, lo, hi)=>Math.max(lo, Math.min(hi, v));
+      vx = clamp(vx, pxDef.min, pxDef.max);
+      vy = clamp(vy, pyDef.min, pyDef.max);
+      if (pxDef.isInt) vx = Math.round(vx);
+      if (pyDef.isInt) vy = Math.round(vy);
+      pxDef.el.value = String(vx);
+      pyDef.el.value = String(vy);
+      modSmoothXVal = null; modSmoothYVal = null;
+      syncUI();
+    }
+
+    if (drawing) { abortDraw = true; }
+    preserveViewNext = true;
+    previewRenderNext = false;
+    commitHistoryNext = true;
+    suppressRandomizeAlways = true;
+    requestDraw(true);
+    // after final draw allow randomize again for future normal renders
+    suppressRandomizeAlways = false;
+  }
+
+  // ---------- controls show/hide (clean screen) ----------
+  const viewControlsEl = document.getElementById('viewControls');
+  let controlsVisible = false;
+  function showControls(show){
+    controlsVisible = !!show;
+    if (viewControlsEl) viewControlsEl.style.display = controlsVisible ? 'grid' : 'none';
+  }
+  // start clean
+  showControls(false);
+
+  // ---------- menu show/hide ----------
+  function showMenu(show) {
+    menu.style.display = show ? 'block' : 'none';
+    backdrop.style.display = show ? 'block' : 'none';
+    inMenu = show;
+    document.body.style.overflow = show ? 'hidden' : '';
+    canvas.style.pointerEvents = show ? 'none' : 'auto';
+    if (show)
+// hide mode toggle while menu open so it doesn't block buttons
+    if (show){ modePill.style.display = 'none'; } else { setModePill(); }
+    updateParamOverlay();
+    if (show && lastRender) {
+      // When opening the menu, present the parameters used for the last render.
+      applyParamsToUI(lastRender);
+    }
+  }
+
+  backdrop.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    abortDraw = true;
+    showMenu(false);
+    // Menu stays open, but we still want to draw.
+    requestDraw(true);
+  }, { passive: false });
+
+  // ---------- gesture handling ----------
+  let inMenu = false;
+  let allowDrawInMenu = false; // set true for Apply+Draw while menu is open
+  let drawing = false;
+  let abortDraw = false;
+  let pendingDraw = false;
+  let pendingDrawForce = false;
+
+  const LONG_PRESS_MS = 520;
+  let pressTimer = null;
+  let moved = false;
+
+  // ---------- pointer gesture state (pan/zoom) ----------
+  const TAP_MOVE_PX = 14 * (window.devicePixelRatio || 1); // movement beyond this is a drag, not a tap
+  const MIN_ZOOM = 0.15;
+  const MAX_ZOOM = 20.0;
+
+  const activePtrs = new Map(); // pointerId -> {x,y}
+  let gestureMode = 'none';     // 'none' | 'drag' | 'pinch'
+  let dragLastX = 0, dragLastY = 0;
+
+  // helpers: current screen->world mapping (uses lastBaseR + viewPan + viewZoom)
+  function _evtToCanvasPx(ev){
+    const rect = canvas.getBoundingClientRect();
+    const sx = canvas.width / rect.width;
+    const sy = canvas.height / rect.height;
+    return { x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy };
+  }
+  function _screenToWorld(px, py) {
+    const w = canvas.width, h = canvas.height;
+    const r = lastBaseR || 1;
+    const sx = ((w - 1) / (2 * r)) * viewZoom;
+    const sy = ((h - 1) / (2 * r)) * viewZoom;
+    return {
+      x: (px / sx) - r + viewPanX,
+      y: r - (py / sy) + viewPanY
+    };
+  }
+  function _applyZoomAroundScreenPoint(newZoom, px, py) {
+    newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
+    if (!lastBaseR) { viewZoom = newZoom; return; }
+
+    const before = _screenToWorld(px, py);
+
+    const w = canvas.width, h = canvas.height;
+    const r = lastBaseR;
+    const sx2 = ((w - 1) / (2 * r)) * newZoom;
+    const sy2 = ((h - 1) / (2 * r)) * newZoom;
+
+    // solve for pan that keeps 'before' under the same screen point
+    viewPanX = before.x - (px / sx2) + r;
+    viewPanY = before.y - r + (py / sy2);
+    viewZoom = newZoom;
+  }
+
+  function onPressStart(e) {
+    moved = false;
+
+    // track pointers (for touch + mouse)
+    const pt = _evtToCanvasPx(e);
+    activePtrs.set(e.pointerId, { x: pt.x, y: pt.y });
+
+    // long-press toggles control panel (only when starting a fresh gesture)
+    if (activePtrs.size === 1) {
+      dragLastX = pt.x; dragLastY = pt.y;
+      gestureMode = 'drag';
+
+      if (pressTimer) clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        showMenu(true);
+      }, LONG_PRESS_MS);
+    } else if (activePtrs.size === 2) {
+      // begin 2-finger gesture
+      const isAllMode = (interactionSubMode === 'all');
+      const isModMode = (interactionSubMode === 'modulate');
+      gestureMode = (isAllMode || isModMode) ? 'pinchpan' : 'pinch';
+      moved = true;
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+
+      // stash pinch baseline
+      const pts = Array.from(activePtrs.values());
+      pinchStart = {
+        d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+        zoom: viewZoom,
+        mx: (pts[0].x + pts[1].x) * 0.5,
+        my: (pts[0].y + pts[1].y) * 0.5,
+        lmx: (pts[0].x + pts[1].x) * 0.5,
+        lmy: (pts[0].y + pts[1].y) * 0.5
+      };
+    } else {
+      // 3+ fingers: ignore for now
+      moved = true;
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    }
+  }
+
+  let pinchStart = null;
+
+  function onPressMove(e) {
+    if (!activePtrs.has(e.pointerId)) return;
+    const pt = _evtToCanvasPx(e);
+    activePtrs.set(e.pointerId, { x: pt.x, y: pt.y });
+
+    // cancel long-press once movement is meaningful
+    const dx0 = pt.x - dragLastX;
+    const dy0 = pt.y - dragLastY;
+    const dist0 = Math.hypot(dx0, dy0);
+
+    if (gestureMode === 'drag' && activePtrs.size === 1) {
+      if (dist0 > TAP_MOVE_PX) {
+        moved = true;
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      }
+      if (!moved) return; // still a tap candidate
+
+      if (!lastBaseR) return;
+
+      const w = canvas.width, h = canvas.height;
+      const r = lastBaseR;
+      const sx = ((w - 1) / (2 * r)) * viewZoom;
+      const sy = ((h - 1) / (2 * r)) * viewZoom;
+
+      // If modulation is enabled and we're in MODULATE submode, use 1-finger drag to modulate parameters.
+      if (modulationEnabled && (interactionSubMode === 'modulate' || interactionSubMode === 'all') && !inMenu){
+        // Absolute screen mapping with soft take-over.
+// Left/bottom = lowest; right/top = highest. Same touch point -> same values.
+// Soft take-over avoids a jump on finger-down: it only engages after moving a small distance,
+// and uses an offset so the transition is continuous.
+        const wPx = canvas.width;
+        const hPx = canvas.height;
+
+        const pxDef = getModParam(elModX.value);
+        const pyDef = getModParam(elModY.value);
+
+        if (!isModulating){
+          isModulating = true;
+          modStartX = pt.x; modStartY = pt.y;
+          // current values at touch start
+          modTargetXVal = +pxDef.el.value;
+          modTargetYVal = +pyDef.el.value;
+          modSmoothXVal = modTargetXVal; modSmoothYVal = modTargetYVal;
+          modAbsEngaged = false;
+          modOffsetX = 0; modOffsetY = 0;
+        }
+
+        lastMoveX = pt.x; lastMoveY = pt.y;
+
+        const dxm = pt.x - modStartX;
+        const dym = pt.y - modStartY;
+        const distm = Math.hypot(dxm, dym);
+
+        const clamp = (v, lo, hi)=>Math.max(lo, Math.min(hi, v));
+
+        // absolute mapping at the *current* touch point
+        const xN = (wPx > 1) ? (pt.x / (wPx - 1)) : 0.5;
+        const yN = (hPx > 1) ? (pt.y / (hPx - 1)) : 0.5;
+
+        let absX = pxDef.min + xN * (pxDef.max - pxDef.min);
+        let absY = pyDef.min + (1 - yN) * (pyDef.max - pyDef.min);
+
+        absX = clamp(absX, pxDef.min, pxDef.max);
+        absY = clamp(absY, pyDef.min, pyDef.max);
+
+        if (pxDef.isInt) absX = Math.round(absX);
+        if (pyDef.isInt) absY = Math.round(absY);
+
+        if (!modAbsEngaged){
+          if (distm < SOFT_TAKEOVER_PX){
+            // still in soft window: keep current values
+            schedulePreviewDraw();
+            return;
+          }
+          // engage: compute offsets so value is continuous at engagement point
+          modAbsEngaged = true;
+          modOffsetX = modTargetXVal - absX;
+          modOffsetY = modTargetYVal - absY;
+        }
+
+        let vx = absX + modOffsetX;
+        let vy = absY + modOffsetY;
+
+        vx = clamp(vx, pxDef.min, pxDef.max);
+        vy = clamp(vy, pyDef.min, pyDef.max);
+
+        if (pxDef.isInt) vx = Math.round(vx);
+        if (pyDef.isInt) vy = Math.round(vy);
+
+        modTargetXVal = vx;
+        modTargetYVal = vy;
+
+        // draw preview with same view, no history, no randomize
+        schedulePreviewDraw();
+        return;
+      }
+
+      // drag in screen px -> pan in world units
+      viewPanX -= dx0 / sx;
+      viewPanY += dy0 / sy;
+
+      dragLastX = pt.x; dragLastY = pt.y;
+      redrawLastRender();
+      return;
+    }
+
+    if ((gestureMode === 'pinch' || gestureMode === 'pinchpan') && activePtrs.size >= 2 && pinchStart) {
+      moved = true;
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+
+      const pts = Array.from(activePtrs.values()).slice(0,2);
+      const mx = (pts[0].x + pts[1].x) * 0.5;
+      const my = (pts[0].y + pts[1].y) * 0.5;
+      const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (pinchStart.d <= 0) return;
+
+      const ratio = d / pinchStart.d;
+
+      // In ALL mode, two-finger drag pans (unless it's a pinch-zoom).
+      if (gestureMode === 'pinchpan' && interactionSubMode === 'all') {
+        const pinchThresh = 0.015;
+        if (Math.abs(ratio - 1) > pinchThresh) {
+          const newZoom = pinchStart.zoom * ratio;
+          _applyZoomAroundScreenPoint(newZoom, mx, my);
+          // reset baseline for smooth continuous pinch
+          pinchStart.d = d;
+          pinchStart.zoom = viewZoom;
+          pinchStart.mx = mx; pinchStart.my = my;
+          pinchStart.lmx = mx; pinchStart.lmy = my;
+          redrawLastRender();
+          return;
+        } else {
+          // pan by midpoint delta
+          if (!lastBaseR) return;
+          const w = canvas.width, h = canvas.height;
+          const r = lastBaseR;
+          const sx = ((w - 1) / (2 * r)) * viewZoom;
+          const sy = ((h - 1) / (2 * r)) * viewZoom;
+
+          const dxm = mx - pinchStart.lmx;
+          const dym = my - pinchStart.lmy;
+          viewPanX -= dxm / sx;
+          viewPanY += dym / sy;
+          pinchStart.lmx = mx;
+          pinchStart.lmy = my;
+          redrawLastRender();
+          return;
+        }
+      }
+
+      // Normal pinch zoom
+      const newZoom = pinchStart.zoom * ratio;
+      _applyZoomAroundScreenPoint(newZoom, pinchStart.mx, pinchStart.my);
+      redrawLastRender();
+      return;
+    }
+  }
+
+  function onPressEnd(e) {
+    activePtrs.delete(e.pointerId);
+
+    // transition pinch->drag if one finger remains
+    if ((gestureMode === 'pinch' || gestureMode === 'pinchpan') && activePtrs.size === 1) {
+      const pt = Array.from(activePtrs.values())[0];
+      gestureMode = 'drag';
+      dragLastX = pt.x; dragLastY = pt.y;
+      pinchStart = null;
+      return;
+    }
+
+    if (activePtrs.size === 0) {
+      gestureMode = 'none';
+      pinchStart = null;
+
+      // clear any pending long-press
+      if (pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+
+      // if we were modulating, commit final full-quality render on release
+      if (isModulating){
+        isModulating = false;
+        doFinalModulateDraw();
+moved = true; // prevent tap navigation
+      }
+
+      // tap-to-render behaviour: only when no gesture movement and UI hidden
+      if (!moved && !inMenu) {
+        const x = (typeof e.clientX === 'number') ? e.clientX : (window.innerWidth/2);
+        if (x < (window.innerWidth * 0.5)) historyBack();
+        else historyForwardOrNew();
+      }
+    }
+  }
+
+  canvas.addEventListener('pointerdown', onPressStart, { passive: true });
+  canvas.addEventListener('pointermove', onPressMove, { passive: true });
+  canvas.addEventListener('pointerup', onPressEnd, { passive: true });
+  canvas.addEventListener('pointercancel', onPressEnd, { passive: true });
+
+  // mouse wheel / trackpad zoom (desktop)
+  canvas.addEventListener('wheel', (e) => {
+    if (!lastBaseR) return;
+    e.preventDefault();
+    const factor = (e.deltaY < 0) ? 1.12 : (1/1.12);
+    const pt = _evtToCanvasPx(e);
+    _applyZoomAroundScreenPoint(viewZoom * factor, pt.x, pt.y);
+    redrawLastRender();
+  }, { passive: false });
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Also suppress context menus on key overlays (iPad long-press)
+  ;[canvas, viewControlsEl, renderInfo, document.getElementById('installHint')].forEach(el => {
+    if (!el) return;
+    el.addEventListener('contextmenu', (e)=>{ e.preventDefault(); }, { passive: false });
+  });
+
+  // ---------- helpers ----------
+    // ---------- Seeded RNG (for deterministic history re-renders) ----------
+  let rng = Math.random;
+
+  function mulberry32(a) {
+    return function() {
+      let t = (a += 0x6D2B79F5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function newSeed() {
+    try {
+      if (window.crypto && crypto.getRandomValues) {
+        const b = new Uint32Array(1);
+        crypto.getRandomValues(b);
+        return b[0] >>> 0;
+      }
+    } catch (e) {}
+    return (Math.floor(Math.random() * 0xFFFFFFFF) >>> 0);
+  }
+
+  function setRngSeed(seed) {
+    const s = (seed >>> 0) || 0x12345678;
+    rng = mulberry32(s);
+    return s;
+  }
+
+function randUniform(lo, hi) { return lo + rng() * (hi - lo); }
+  function randInt(lo, hi) { return Math.floor(lo + rng() * (hi - lo + 1)); }
+  function pick(arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+  function setRandMode(v) {
+    randModeRadios.forEach(r => r.checked = (r.value === v));
+  }
+
+  // ---------- dual randomize ----------
+  function randomizeAlphaBeta() {
+    const R = activeFormulaRange;
+    const a = randUniform(R.a[0], R.a[1]);
+    const b = randUniform(R.b[0], R.b[1]);
+    elAlpha.value = String(clamp(valToPct(a, R.a[0], R.a[1]), 0, 100));
+    elBeta.value  = String(clamp(valToPct(b, R.b[0], R.b[1]), 0, 100));
+  }
+
+  function randomizeAllParams() {
+    // formula
+    elFormula.value = pick(Variants).id;
+
+    // parameters a,b,c,d within per-formula range
+    remapSlidersToNewRange(getFormulaRange(elFormula.value));
+    const R = activeFormulaRange;
+    const a = randUniform(R.a[0], R.a[1]);
+    const b = randUniform(R.b[0], R.b[1]);
+    const c = randUniform(R.c[0], R.c[1]);
+    const d = randUniform(R.d[0], R.d[1]);
+    elAlpha.value = String(clamp(valToPct(a, R.a[0], R.a[1]), 0, 100));
+    elBeta.value  = String(clamp(valToPct(b, R.b[0], R.b[1]), 0, 100));
+    elDelta.value = String(clamp(valToPct(c, R.c[0], R.c[1]), 0, 100));
+    elGamma.value = String(clamp(valToPct(d, R.d[0], R.d[1]), 0, 100));
+
+    // orbits / iters / burn
+    elOrbits.value = String(pick([10, 25, 50, 60]));
+    elIters.value  = String(pick([2000, 4000, 8000, 12000, 16000]));
+    elBurn.value   = String(pick([0, 20, 50, 100, 200]));
+
+    // range / init range
+    elRangeR.value = String(pick([150, 200, 250, 300, 400, 600]));
+    elInitR.value  = String(pick([30, 50, 80, 100, 150]));
+
+    // colormap
+    elCmap.value = pick(Object.keys(ColorMaps));
+  }
+
+  function applyRandomizeModeIfEnabled() {
+    // Randomize ONLY the parameters whose per-parameter flags are checked.
+    if (!rand) return;
+    if (!elRandomize.checked) return;
+
+    // formula (if randomized, update ranges immediately)
+    if (rand.formula && rand.formula.checked) {
+      const enabled = Variants.filter(v => !v.disabled);
+      elFormula.value = pick(enabled).id;
+    }
+
+    // update active range for current formula
+    remapSlidersToNewRange(getFormulaRange(elFormula.value));
+    const R = activeFormulaRange;
+
+    // a
+    if (rand.alpha && rand.alpha.checked) {
+      const a = randUniform(R.a[0], R.a[1]);
+      elAlpha.value = String(clamp(valToPct(a, R.a[0], R.a[1]), 0, 100));
+    }
+    // b
+    if (rand.beta && rand.beta.checked) {
+      const b = randUniform(R.b[0], R.b[1]);
+      elBeta.value = String(clamp(valToPct(b, R.b[0], R.b[1]), 0, 100));
+    }
+    // d (perturbation)
+    if (rand.gamma && rand.gamma.checked) {
+      const d = randUniform(R.d[0], R.d[1]);
+      elGamma.value = String(clamp(valToPct(d, R.d[0], R.d[1]), 0, 100));
+    }
+    // c (sqrt offset)
+    if (rand.delta && rand.delta.checked) {
+      const c = randUniform(R.c[0], R.c[1]);
+      elDelta.value = String(clamp(valToPct(c, R.c[0], R.c[1]), 0, 100));
+    }
+  }
+
+  // ---------- colormap to orbit colors ----------
+  function makeOrbitColors(N, cmapName) {
+    const cmap = ColorMaps[cmapName] || ColorMaps["Turbo"];
+    const cols = new Array(N);
+    if (N <= 1) {
+      cols[0] = cmap(0.5).map(x => x|0);
+      return cols;
+    }
+    for (let i=0;i<N;i++){
+      const t = i / (N - 1);
+      const c = cmap(t);
+      cols[i] = [c[0]|0, c[1]|0, c[2]|0];
+    }
+    return cols;
+  }
+
+  // ---------- draw ----------
+  function requestDraw(force=false) {
+  // If a draw is in progress, abort it and queue a new one.
+  if (drawing) {
+    pendingDraw = true;
+    pendingDrawForce = pendingDrawForce || !!force;
+    abortDraw = true;
+    return;
+  }
+  // Allow drawing while menu is open only when explicitly forced (Apply+Draw)
+  allowDrawInMenu = !!force;
+  if (inMenu && !allowDrawInMenu) return;
+  abortDraw = false;
+  drawHopalong();
+}
+
+
+  function drawHopalong() {
+    drawing = true;
+    const previewThis = !!previewRenderNext;
+    const usePreview = previewThis && (PREVIEW_SCALE < 0.999);
+
+    // Ensure deterministic renders (including when revisiting history).
+    // Also, when ALL randomization flags are off, keep the seed stable across redraws
+    // so repeated draws are visually identical (including colour distribution).
+    const anyRandChecked = document.querySelector('.randFlag:checked') != null;
+    const canReuseLastSeed = (!anyRandChecked || previewRenderNext || suppressRandomizeAlways) && lastRender && lastRender.seed != null;
+
+    const navEntry = (navReRender && renderHistory[historyPos]) ? renderHistory[historyPos] : null;
+
+    if (navEntry && navEntry.seed != null) {
+      currentSeed = navEntry.seed >>> 0;
+    } else if (canReuseLastSeed) {
+      currentSeed = lastRender.seed >>> 0;
+    } else {
+      // New render: fresh seed.
+      currentSeed = (Date.now() ^ ((Math.random() * 0x7fffffff) | 0)) >>> 0;
+    }
+    setRngSeed(currentSeed);
+
+    // auto randomize (based on selected per-parameter checkboxes)
+    if (!suppressRandomizeAlways && !suppressRandomizeOnce && !navReRender) {
+      applyRandomizeModeIfEnabled();
+    }
+    suppressRandomizeOnce = false;
+
+    const a = getA();
+    const b = getB();
+    const g = getD(); // perturbation (d)
+    const d = getC(); // sqrt offset (c)
+
+    const variant = getVariant();
+    const N = parseInt(elOrbits.value, 10);
+    let iters = parseInt(elIters.value, 10);
+    let burn = parseInt(elBurn.value, 10);
+
+    // keep preview cheaper
+    if (previewRenderNext){ iters = Math.min(iters, 5000); burn = Math.min(burn, 150); }
+
+    const r = parseFloat(elRangeR.value);
+    const initR = parseFloat(elInitR.value);
+
+    // Decide which buffer we draw into
+    const outW = canvas.width, outH = canvas.height;
+    let w = outW, h = outH, imgA = img, bufA = buf;
+    if (usePreview){
+      ensurePreviewBuffer();
+      w = pCanvas.width; h = pCanvas.height;
+      imgA = pImg; bufA = pBuf;
+    }
+
+    const sx = (w - 1) / (2 * r);
+    const sy = (h - 1) / (2 * r);
+    const xoff = r, yoff = r;
+
+    const orbitColors = makeOrbitColors(N, elCmap.value);
+
+    // Orbit starting points: store in history so revisiting the newest render is identical.
+    let orbitStarts = null;
+    if (navEntry && Array.isArray(navEntry.orbitStarts) && navEntry.orbitStarts.length >= N*2) {
+      orbitStarts = navEntry.orbitStarts;
+    } else if (canReuseLastSeed && lastRender && Array.isArray(lastRender.orbitStarts) && lastRender.orbitStarts.length >= N*2) {
+      orbitStarts = lastRender.orbitStarts;
+    }
+    const orbitStartsOut = [];
+
+    // For preview, skip storing point clouds (faster). Full renders update pan/zoom buffers.
+    const storePts = !usePreview;
+    let ptsXY = null, ptOrbit = null, maxPts = 0, ptCount = 0;
+    if (storePts){
+      maxPts = Math.max(0, N * Math.max(0, iters - burn));
+      ptsXY = new Float32Array(maxPts * 2);
+      ptOrbit = new Uint16Array(maxPts);
+    }
+
+    // reset view for a fresh render (unless preserving view, e.g. during modulation)
+    if (!preserveViewNext) resetView();
+    preserveViewNext = false;
+
+    // local pixel setter (to chosen buffer)
+    function setPix(px, py, rr, gg, bb){
+      const idx = (py * w + px) * 4;
+      bufA[idx] = rr; bufA[idx+1] = gg; bufA[idx+2] = bb; bufA[idx+3] = 255;
+    }
+
+    function clearBuf(){
+      for (let i = 0; i < bufA.length; i += 4) {
+        bufA[i] = 0; bufA[i+1] = 0; bufA[i+2] = 0; bufA[i+3] = 255;
+      }
+    }
+
+    function blit(){
+      if (usePreview){
+        pCtx.putImageData(pImg, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.clearRect(0,0,outW,outH);
+        ctx.drawImage(pCanvas, 0, 0, outW, outH);
+        ctx.imageSmoothingEnabled = false;
+      } else {
+        ctx.putImageData(img, 0, 0);
+      }
+    }
+
+    clearBuf();
+
+    let orbitIdx = 0;
+
+    function stepFrame() {
+      if (abortDraw || (inMenu && !allowDrawInMenu)) {
+        drawing = false;
+        allowDrawInMenu = false;
+        blit();
+
+        if (pendingDraw) {
+          const f = pendingDrawForce;
+          pendingDraw = false;
+          pendingDrawForce = false;
+          setTimeout(() => requestDraw(f), 0);
+        }
+        return;
+      }
+
+      const orbitsPerFrame = usePreview ? 2 : 3;
+      let done = 0;
+
+      while (orbitIdx < N && done < orbitsPerFrame) {
+        let x, y;
+        if (orbitStarts){
+          x = orbitStarts[orbitIdx*2] || 0;
+          y = orbitStarts[orbitIdx*2+1] || 0;
+        } else {
+          x = randUniform(-initR, initR);
+          y = randUniform(-initR, initR);
+          orbitStartsOut.push(x, y);
+        }
+
+        const col = orbitColors[orbitIdx];
+        const rr = col[0], gg = col[1], bb = col[2];
+
+        // burn-in
+        for (let k = 0; k < burn; k++) {
+          const res = variant.step(x, y, a, b, g, d);
+          x = res[0]; y = res[1];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) { x = 0; y = 0; break; }
+        }
+
+        // plot
+        for (let k = burn; k < iters; k++) {
+          const res = variant.step(x, y, a, b, g, d);
+          x = res[0]; y = res[1];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) break;
+
+          if (storePts && ptCount < maxPts) {
+            ptsXY[ptCount*2] = x; ptsXY[ptCount*2+1] = y; ptOrbit[ptCount] = orbitIdx; ptCount++;
+          }
+
+          const px = (((x - viewPanX) + xoff) * (sx * viewZoom)) | 0;
+          const py = ((yoff - (y - viewPanY)) * (sy * viewZoom)) | 0;
+
+          if ((px >>> 0) < w && (py >>> 0) < h) {
+            setPix(px, py, rr, gg, bb);
+          }
+
+          if ((k & 1023) === 0 && (abortDraw || (inMenu && !allowDrawInMenu))) break;
+        }
+
+        orbitIdx++;
+        done++;
+      }
+
+      blit();
+
+      if (orbitIdx < N) requestAnimationFrame(stepFrame);
+      else {
+        drawing = false;
+        allowDrawInMenu = false;
+        blit();
+
+        if (pendingDraw) {
+          const f = pendingDrawForce;
+          pendingDraw = false;
+          pendingDrawForce = false;
+          setTimeout(() => requestDraw(f), 0);
+        }
+
+        if (storePts){
+          lastPtsXY = ptsXY;
+          lastPtOrbit = ptOrbit;
+          lastPtCount = ptCount;
+          lastOrbitColors = orbitColors;
+          lastBaseR = r;
+        }
+
+        updateParamOverlay();
+
+        // log parameters for this render (unless re-rendering from history)
+        if (!navReRender && commitHistoryNext) addRenderEntry({
+          completed: true,
+          when: nowStamp(),
+          seed: currentSeed >>> 0,
+          orbitStarts: (orbitStarts || orbitStartsOut),
+          formulaId: variant.id,
+          formulaName: variant.name,
+          formulaDesc: variant.desc,
+          // Slider % positions (0..100)
+          aPct: +elAlpha.value,
+          bPct: +elBeta.value,
+          cPct: +elDelta.value,
+          dPct: +elGamma.value,
+          // Actual parameter values (after applying formula-specific ranges)
+          aVal: a,
+          bVal: b,
+          cVal: d,
+          dVal: g,
+          viewZoom: viewZoom,
+          viewPanX: viewPanX,
+          viewPanY: viewPanY,
+          N: N,
+          iters: iters,
+          burn: burn,
+          rangeR: r,
+          initR: initR,
+          cmap: elCmap.value,
+          cmapCSS: cmapGradientCSS(elCmap.value),
+          autoRandomizeRaw: !!elRandomize.checked,
+          randModeRaw: getRandMode()
+        });
+        else {
+          // We just re-rendered an existing history entry; keep history unchanged.
+          const t = renderHistory.find(x => x._id === navTargetId);
+          if (t) {
+            lastRender = t;
+            renderHistoryUI(t._id);
+          }
+          navReRender = false;
+          navTargetId = null;
+        }
+        commitHistoryNext = true;
+        previewRenderNext = false;
+      }
+    }
+
+    requestAnimationFrame(stepFrame);
+  }
+
+
+  // buttons
+  btnApply.addEventListener('click', () => {
+    syncUI();
+    // Keep menu open; only Close button closes it.
+    // Menu stays open, but we still want to draw.
+    requestDraw(true);
+  });
+  btnClose.addEventListener('click', () => { showMenu(false); showControls(false); });
+
+  // Start with immediate draw
+  maybeShowInstallHint();
+  setTimeout(() => requestDraw(), 50);
+
+  // --- suppress Safari selection/callout in overlays ---
+  document.addEventListener('contextmenu', (e) => {
+    if (e.target === canvas || menu.contains(e.target) || renderInfo.contains(e.target)) e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('selectstart', (e) => {
+    if (e.target === canvas || menu.contains(e.target) || renderInfo.contains(e.target)) e.preventDefault();
+  });
+
+  // --- iOS: prevent text selection/callout in menu and improve slider dragging ---
+  (function(){
+    const menu = document.getElementById('menu');
+    if (!menu) return;
+
+    const kill = (ev)=>{ ev.preventDefault(); };
+    menu.addEventListener('contextmenu', kill);
+    menu.addEventListener('selectstart', kill);
+
+    // If user is interacting with a range slider, temporarily disable menu scroll
+    const armNoScroll = ()=>menu.classList.add('noScroll');
+    const disarmNoScroll = ()=>menu.classList.remove('noScroll');
+
+    const ranges = menu.querySelectorAll('input[type="range"]');
+    ranges.forEach(r=>{
+      r.addEventListener('pointerdown', (ev)=>{ ev.stopPropagation(); armNoScroll(); }, {passive:true});
+      r.addEventListener('pointerup',   (ev)=>{ ev.stopPropagation(); disarmNoScroll(); }, {passive:true});
+      r.addEventListener('pointercancel',(ev)=>{ ev.stopPropagation(); disarmNoScroll(); }, {passive:true});
+
+      r.addEventListener('touchstart', (ev)=>{ ev.stopPropagation(); armNoScroll(); }, {passive:true});
+      r.addEventListener('touchend',   (ev)=>{ ev.stopPropagation(); disarmNoScroll(); }, {passive:true});
+      r.addEventListener('touchcancel',(ev)=>{ ev.stopPropagation(); disarmNoScroll(); }, {passive:true});
+    });
+  })();
+
+
+// --- Startup help (once per browsing session) ---
+(function() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = (window.navigator.standalone === true) ||
+                       (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+  function showInstallHintHTML() {
+    if (!isIOS) return '';
+    if (isStandalone) return '';
+    return `<p><b>iOS full-screen tip:</b> Use Share → <b>Add to Home Screen</b>, and keep <b>Open as Web App</b> enabled for the best full-screen experience.</p>`;
+  }
+
+  function bodyHTML() {
+    return `
+      ${showInstallHintHTML()}
+      <p><b>Short tap Right side:</b> Next</p>
+      <p><b>Short tap Left side:</b> Previous</p>
+      <p><b>Long press:</b> Opens the menu</p>
+      <p><b>Pan / zoom:</b> Drag to pan. Pinch to zoom.</p>
+    `;
+  }
+
+  function show() {
+    const modal = document.getElementById('startupHelp');
+    const body = document.getElementById('startupHelpBody');
+    if (!modal || !body) return;
+    body.innerHTML = bodyHTML();
+    modal.style.display = 'flex';
+  }
+
+  function hide() {
+    const modal = document.getElementById('startupHelp');
+    if (modal) modal.style.display = 'none';
+  }
+
+  // Only show once per session unless permanently disabled
+  try {
+    const never = localStorage.getItem('hopalong_help_never') === '1';
+    const shownThisSession = sessionStorage.getItem('hopalong_help_shown') === '1';
+    if (!never && !shownThisSession) {
+      // Delay until first paint so it doesn't race initial canvas sizing
+      setTimeout(() => {
+        show();
+        sessionStorage.setItem('hopalong_help_shown', '1');
+      }, 150);
+    }
+  } catch (e) {}
+
+  document.addEventListener('click', (ev) => {
+    if (ev.target && ev.target.id === 'startupHelpOk') {
+      hide();
+      ev.preventDefault();
+      ev.stopPropagation();
+    } else if (ev.target && ev.target.id === 'startupHelpNever') {
+      try { localStorage.setItem('hopalong_help_never', '1'); } catch (e) {}
+      hide();
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  }, true);
+})();
+
+})();
+
+</script>
+</body>
+</html>
